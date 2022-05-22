@@ -11,6 +11,16 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	// Resolve cross-domain problems
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+type Client struct {
+	id   string
+	conn *websocket.Conn
+	send chan string
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -18,20 +28,20 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func wshandler(w http.ResponseWriter, r *http.Request) {
-	if websocket.IsWebSocketUpgrade(r) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-
-		fmt.Fprintf(w, "Upgread")
-		fmt.Println(conn)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
 	}
+	fmt.Println(conn)
 }
 
 func main() {
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/chat", wshandler)
-	http.ListenAndServe(":8080", nil)
+
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }
