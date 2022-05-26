@@ -22,7 +22,7 @@ type client chan<- []byte
 var (
 	entering = make(chan client)
 	leaving  = make(chan client)
-	message  = make(chan []byte)
+	messages = make(chan []byte)
 )
 
 func broadcaster() {
@@ -30,7 +30,7 @@ func broadcaster() {
 
 	for {
 		select {
-		case msg := <-message:
+		case msg := <-messages:
 			for cli := range clients {
 				cli <- msg
 			}
@@ -41,6 +41,36 @@ func broadcaster() {
 		case cli := <-leaving:
 			delete(clients, cli)
 			close(cli)
+		}
+	}
+}
+
+func handleConn(conn *websocket.Conn) {
+	ch := make(chan []byte)
+	go clientWriter(conn, ch)
+
+	who := conn.RemoteAddr().String()
+	messages <- []byte(who + "has arrived")
+	entering <- ch
+	for {
+		messageType, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		fmt.Println(messageType)
+		ch <- message
+	}
+
+	// leaving <- ch
+	// messages <- []byte(who + " has left")
+	// defer conn.Close()
+}
+
+func clientWriter(conn *websocket.Conn, ch chan []byte) {
+	for msg := range ch {
+		if err := conn.WriteMessage(1, msg); err != nil {
+			log.Println(err)
 		}
 	}
 }
@@ -56,17 +86,9 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for {
-		messageType, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		if err := conn.WriteMessage(messageType, message); err != nil {
-			log.Println(err)
-			return
-		}
-	}
+	go broadcaster()
+	go handleConn(conn)
+
 }
 
 // func NewClient(conn *websocket.Conn) *Client {
