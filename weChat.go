@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,22 +18,27 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type client chan<- []byte
+type Client struct {
+	id   string
+	conn *websocket.Conn
+	send chan []byte
+}
 
 var (
-	entering = make(chan client)
-	leaving  = make(chan client)
+	entering = make(chan Client)
+	leaving  = make(chan Client)
 	messages = make(chan []byte)
 )
 
+var clients = make(map[Client]bool)
+
 func broadcaster() {
-	clients := make(map[client]bool)
 
 	for {
 		select {
 		case msg := <-messages:
 			for cli := range clients {
-				cli <- msg
+				cli.send <- msg
 			}
 
 		case cli := <-entering:
@@ -40,18 +46,19 @@ func broadcaster() {
 
 		case cli := <-leaving:
 			delete(clients, cli)
-			close(cli)
+			close(cli.send)
 		}
 	}
 }
 
 func handleConn(conn *websocket.Conn) {
-	ch := make(chan []byte)
-	go clientWriter(conn, ch)
-
+	cli := *NewClient(conn)
 	who := conn.RemoteAddr().String()
 	messages <- []byte(who + "has arrived")
-	entering <- ch
+	entering <- *NewClient(conn)
+
+	go clientWriter(conn, cli.send)
+
 	for {
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
@@ -59,18 +66,16 @@ func handleConn(conn *websocket.Conn) {
 			return
 		}
 		fmt.Println(messageType)
-		ch <- message
+		cli.send <- message
 	}
-
-	// leaving <- ch
-	// messages <- []byte(who + " has left")
-	// defer conn.Close()
 }
 
 func clientWriter(conn *websocket.Conn, ch chan []byte) {
 	for msg := range ch {
-		if err := conn.WriteMessage(1, msg); err != nil {
-			log.Println(err)
+		for cli := range clients {
+			if err := cli.conn.WriteMessage(1, msg); err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }
@@ -91,10 +96,10 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// func NewClient(conn *websocket.Conn) *Client {
-// 	uuid := uuid.New().String()
-// 	return &Client{id: uuid, conn: conn, send: make(chan []byte)}
-// }
+func NewClient(conn *websocket.Conn) *Client {
+	uuid := uuid.New().String()
+	return &Client{id: uuid, conn: conn, send: make(chan []byte)}
+}
 
 func main() {
 	http.HandleFunc("/", handler)
