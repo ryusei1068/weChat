@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -18,13 +17,33 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type Client struct {
-	id   string
-	conn *websocket.Conn
-	send chan []byte
-}
+type client chan<- []byte
 
-var clients = make(map[*Client]bool)
+var (
+	entering = make(chan client)
+	leaving  = make(chan client)
+	message  = make(chan []byte)
+)
+
+func broadcaster() {
+	clients := make(map[client]bool)
+
+	for {
+		select {
+		case msg := <-message:
+			for cli := range clients {
+				cli <- msg
+			}
+
+		case cli := <-entering:
+			clients[cli] = true
+
+		case cli := <-leaving:
+			delete(clients, cli)
+			close(cli)
+		}
+	}
+}
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Hello, World")
@@ -50,10 +69,10 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func NewClient(conn *websocket.Conn) *Client {
-	uuid := uuid.New().String()
-	return &Client{id: uuid, conn: conn, send: make(chan []byte)}
-}
+// func NewClient(conn *websocket.Conn) *Client {
+// 	uuid := uuid.New().String()
+// 	return &Client{id: uuid, conn: conn, send: make(chan []byte)}
+// }
 
 func main() {
 	http.HandleFunc("/", handler)
