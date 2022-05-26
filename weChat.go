@@ -32,15 +32,9 @@ var (
 
 var clients = make(map[Client]bool)
 
-func broadcaster() {
-
+func usermanage() {
 	for {
 		select {
-		case msg := <-messages:
-			for cli := range clients {
-				cli.send <- msg
-			}
-
 		case cli := <-entering:
 			clients[cli] = true
 
@@ -53,8 +47,12 @@ func broadcaster() {
 
 func handleConn(conn *websocket.Conn) {
 	cli := *NewClient(conn)
-	who := conn.RemoteAddr().String()
-	messages <- []byte(who + "has arrived")
+	who := cli.id
+	for cli := range clients {
+		if err := cli.conn.WriteMessage(1, []byte(who+" has arrived")); err != nil {
+			log.Println(err)
+		}
+	}
 	entering <- *NewClient(conn)
 
 	go clientWriter(conn, cli.send)
@@ -91,7 +89,7 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go broadcaster()
+	go usermanage()
 	go handleConn(conn)
 
 }
