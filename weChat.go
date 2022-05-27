@@ -55,20 +55,23 @@ func handleConn(conn *websocket.Conn) {
 	}
 	entering <- *NewClient(conn)
 
-	go clientWriter(conn, cli.send)
+	ch := make(chan []byte)
+	go clientWriter(ch)
+	go readMessge(conn, ch)
+}
 
+func readMessge(conn *websocket.Conn, ch chan []byte) {
 	for {
-		messageType, message, err := conn.ReadMessage()
+		_, message, err := conn.ReadMessage()
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		fmt.Println(messageType)
-		cli.send <- message
+		ch <- message
 	}
 }
 
-func clientWriter(conn *websocket.Conn, ch chan []byte) {
+func clientWriter(ch chan []byte) {
 	for msg := range ch {
 		for cli := range clients {
 			if err := cli.conn.WriteMessage(1, msg); err != nil {
