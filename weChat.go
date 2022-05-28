@@ -23,6 +23,11 @@ type Client struct {
 	send chan []byte
 }
 
+type Message struct {
+	Addr string `json:"addr"`
+	Msg  string `json:"msg"`
+}
+
 var (
 	entering = make(chan Client)
 	leaving  = make(chan Client)
@@ -37,8 +42,10 @@ func usermanage() {
 			clients[cli] = true
 
 		case cli := <-leaving:
-			delete(clients, cli)
-			close(cli.send)
+			if _, ok := clients[cli]; ok {
+				delete(clients, cli)
+				close(cli.send)
+			}
 		}
 	}
 }
@@ -47,32 +54,33 @@ func handleConn(conn *websocket.Conn) {
 	cli := *NewClient(conn)
 	who := cli.id
 	for cli := range clients {
-		if err := cli.conn.WriteMessage(1, []byte(who+" has arrived")); err != nil {
+		if err := cli.conn.WriteMessage(1, []byte(who+" has arrvied")); err != nil {
 			log.Println(err)
 		}
 	}
 	entering <- *NewClient(conn)
 
-	ch := make(chan []byte)
+	ch := make(chan Message)
 	go broadCast(ch)
 	go readMessge(conn, ch)
 }
 
-func readMessge(conn *websocket.Conn, ch chan []byte) {
+func readMessge(conn *websocket.Conn, ch chan Message) {
 	for {
-		_, message, err := conn.ReadMessage()
+		var msg Message
+		err := conn.ReadJSON(&msg)
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		ch <- message
+		ch <- msg
 	}
 }
 
-func broadCast(ch chan []byte) {
+func broadCast(ch chan Message) {
 	for msg := range ch {
 		for cli := range clients {
-			if err := cli.conn.WriteMessage(1, msg); err != nil {
+			if err := cli.conn.WriteJSON(msg); err != nil {
 				log.Println(err)
 			}
 		}
@@ -92,7 +100,7 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func NewClient(conn *websocket.Conn) *Client {
-	uuid := uuid.New().String()
+	uuid := uuid.NewString()
 	return &Client{id: uuid, conn: conn, send: make(chan []byte)}
 }
 
