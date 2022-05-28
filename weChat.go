@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -27,7 +26,6 @@ type Client struct {
 var (
 	entering = make(chan Client)
 	leaving  = make(chan Client)
-	messages = make(chan []byte)
 )
 
 var clients = make(map[Client]bool)
@@ -56,7 +54,7 @@ func handleConn(conn *websocket.Conn) {
 	entering <- *NewClient(conn)
 
 	ch := make(chan []byte)
-	go clientWriter(ch)
+	go broadCast(ch)
 	go readMessge(conn, ch)
 }
 
@@ -71,7 +69,7 @@ func readMessge(conn *websocket.Conn, ch chan []byte) {
 	}
 }
 
-func clientWriter(ch chan []byte) {
+func broadCast(ch chan []byte) {
 	for msg := range ch {
 		for cli := range clients {
 			if err := cli.conn.WriteMessage(1, msg); err != nil {
@@ -79,10 +77,6 @@ func clientWriter(ch chan []byte) {
 			}
 		}
 	}
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello, World")
 }
 
 func wshandler(w http.ResponseWriter, r *http.Request) {
@@ -102,8 +96,21 @@ func NewClient(conn *websocket.Conn) *Client {
 	return &Client{id: uuid, conn: conn, send: make(chan []byte)}
 }
 
+func serveHome(w http.ResponseWriter, r *http.Request) {
+	log.Println(r.URL)
+	if r.URL.Path != "/" {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	http.ServeFile(w, r, "index.html")
+}
+
 func main() {
-	http.HandleFunc("/", handler)
+	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/chat", wshandler)
 
 	err := http.ListenAndServe(":8080", nil)
