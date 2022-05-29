@@ -20,7 +20,7 @@ var upgrader = websocket.Upgrader{
 type Client struct {
 	id   string
 	conn *websocket.Conn
-	send chan []byte
+	send chan Message
 }
 
 type Message struct {
@@ -31,9 +31,8 @@ type Message struct {
 var (
 	entering = make(chan Client)
 	leaving  = make(chan Client)
+	clients  = make(map[Client]bool)
 )
-
-var clients = make(map[Client]bool)
 
 func usermanage() {
 	for {
@@ -55,33 +54,38 @@ func handleConn(conn *websocket.Conn) {
 	who := cli.id
 	for cli := range clients {
 		if err := cli.conn.WriteMessage(1, []byte(who+" has arrvied")); err != nil {
-			log.Println(err)
+			log.Printf("failed sending %s", err)
 		}
 	}
-	entering <- *NewClient(conn)
+	entering <- cli
 
-	ch := make(chan Message)
-	go broadCast(ch)
-	go readMessge(conn, ch)
+	go cli.broadCast()
+	go cli.readMessge()
 }
 
-func readMessge(conn *websocket.Conn, ch chan Message) {
+func (c *Client) readMessge() {
+	defer func() {
+		leaving <- *c
+		c.conn.Close()
+	}()
 	for {
 		var msg Message
-		err := conn.ReadJSON(&msg)
+		err := c.conn.ReadJSON(&msg)
 		if err != nil {
-			log.Println(err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
 			return
 		}
-		ch <- msg
+		c.send <- msg
 	}
 }
 
-func broadCast(ch chan Message) {
-	for msg := range ch {
+func (c Client) broadCast() {
+	for msg := range c.send {
 		for cli := range clients {
 			if err := cli.conn.WriteJSON(msg); err != nil {
-				log.Println(err)
+				log.Printf("failed sending message to client %s", err)
 			}
 		}
 	}
@@ -90,18 +94,17 @@ func broadCast(ch chan Message) {
 func wshandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		log.Printf("failed upgrade %s ", err)
 		return
 	}
 
 	go usermanage()
 	go handleConn(conn)
-
 }
 
 func NewClient(conn *websocket.Conn) *Client {
 	uuid := uuid.NewString()
-	return &Client{id: uuid, conn: conn, send: make(chan []byte)}
+	return &Client{id: uuid, conn: conn, send: make(chan Message)}
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
