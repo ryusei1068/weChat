@@ -29,9 +29,9 @@ type Message struct {
 }
 
 var (
-	entering = make(chan Client)
-	leaving  = make(chan Client)
-	clients  = make(map[Client]bool)
+	entering = make(chan *Client)
+	leaving  = make(chan *Client)
+	clients  = make(map[*Client]bool)
 )
 
 func usermanage() {
@@ -50,7 +50,7 @@ func usermanage() {
 }
 
 func handleConn(conn *websocket.Conn) {
-	cli := *NewClient(conn)
+	cli := NewClient(conn)
 	who := cli.id
 	for cli := range clients {
 		if err := cli.conn.WriteMessage(1, []byte(who+" has arrvied")); err != nil {
@@ -59,20 +59,20 @@ func handleConn(conn *websocket.Conn) {
 	}
 	entering <- cli
 
-	go cli.broadCast()
+	go cli.sender()
 	go cli.readMessge()
 }
 
 func (c *Client) readMessge() {
 	defer func() {
-		leaving <- *c
+		leaving <- c
 		c.conn.Close()
 	}()
 	for {
 		var msg Message
 		err := c.conn.ReadJSON(&msg)
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				log.Printf("error: %v", err)
 			}
 			return
@@ -81,12 +81,30 @@ func (c *Client) readMessge() {
 	}
 }
 
-func (c Client) broadCast() {
-	for msg := range c.send {
-		for cli := range clients {
+func (c Client) broadCast(msg Message) {
+	for cli := range clients {
+		if err := cli.conn.WriteJSON(msg); err != nil {
+			log.Printf("failed sending to all client %s", err)
+		}
+	}
+}
+
+func (c Client) privateMsg(msg Message) {
+	for cli := range clients {
+		if cli.id == msg.Addr {
 			if err := cli.conn.WriteJSON(msg); err != nil {
-				log.Printf("failed sending message to client %s", err)
+				log.Printf("failed sendig to specific client %s", err)
 			}
+		}
+	}
+}
+
+func (c Client) sender() {
+	for msg := range c.send {
+		if msg.Addr == "public" {
+			c.broadCast(msg)
+		} else {
+			c.privateMsg(msg)
 		}
 	}
 }
