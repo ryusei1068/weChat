@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -29,12 +30,14 @@ type Message struct {
 }
 
 var (
-	entering = make(chan *Client)
-	leaving  = make(chan *Client)
-	clients  = make(map[*Client]bool)
+	entering  = make(chan *Client)
+	leaving   = make(chan *Client)
+	clients   = make(map[*Client]bool)
+	broadcast = make(chan Message)
+	private   = make(chan Message)
 )
 
-func usermanage() {
+func (c *Client) usermanage() {
 	for {
 		select {
 		case cli := <-entering:
@@ -44,6 +47,26 @@ func usermanage() {
 			if _, ok := clients[cli]; ok {
 				delete(clients, cli)
 				close(cli.send)
+			}
+		case msg := <-broadcast:
+			for client := range clients {
+				select {
+				case client.send <- msg:
+				default:
+					close(client.send)
+					delete(clients, client)
+				}
+			}
+		case msg := <-private:
+			for cli := range clients {
+				if cli.id == msg.Addr {
+					select {
+					case cli.send <- msg:
+					default:
+						close(cli.send)
+						delete(clients, cli)
+					}
+				}
 			}
 		}
 	}
@@ -63,34 +86,24 @@ func (c *Client) readMessge() {
 			}
 			break
 		}
-		c.send <- msg
-	}
-}
-
-func (c Client) broadCast(msg Message) {
-	for cli := range clients {
-		if err := cli.conn.WriteJSON(msg); err != nil {
-			log.Printf("failed to send to all users %s", err)
-		}
-	}
-}
-
-func (c Client) privateMsg(msg Message) {
-	for cli := range clients {
-		if cli.id == msg.Addr {
-			if err := cli.conn.WriteJSON(msg); err != nil {
-				log.Printf("failed to send to specific user %s", err)
-			}
-		}
-	}
-}
-
-func (c Client) sender() {
-	for msg := range c.send {
 		if msg.Addr == "public" {
-			c.broadCast(msg)
+			broadcast <- msg
 		} else {
-			c.privateMsg(msg)
+			private <- msg
+		}
+	}
+}
+
+func (c Client) writeMessge() {
+	for {
+		select {
+		case message, ok := <-c.send:
+			fmt.Println(message, ok)
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			c.conn.WriteJSON(message)
 		}
 	}
 }
@@ -101,17 +114,16 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Upgrade failed %s ", err)
 		return
 	}
-
-	go usermanage()
-
 	cli := NewClient(conn)
+
+	go cli.usermanage()
+
 	if err := cli.conn.WriteMessage(1, []byte("your id is "+cli.id)); err != nil {
 		log.Println(err)
 	}
 
 	entering <- cli
-
-	go cli.sender()
+	go cli.writeMessge()
 	go cli.readMessge()
 }
 
