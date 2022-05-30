@@ -70,7 +70,7 @@ func (c *Client) readMessge() {
 func (c Client) broadCast(msg Message) {
 	for cli := range clients {
 		if err := cli.conn.WriteJSON(msg); err != nil {
-			log.Printf("failed sending to all client %s", err)
+			log.Printf("failed to send to all users %s", err)
 		}
 	}
 }
@@ -79,7 +79,7 @@ func (c Client) privateMsg(msg Message) {
 	for cli := range clients {
 		if cli.id == msg.Addr {
 			if err := cli.conn.WriteJSON(msg); err != nil {
-				log.Printf("failed sendig to specific client %s", err)
+				log.Printf("failed to send to specific user %s", err)
 			}
 		}
 	}
@@ -98,20 +98,19 @@ func (c Client) sender() {
 func wshandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("failed upgrade %s ", err)
+		log.Printf("Upgrade failed %s ", err)
 		return
 	}
 
+	go usermanage()
+
 	cli := NewClient(conn)
-	who := cli.id
-	for cli := range clients {
-		if err := cli.conn.WriteMessage(1, []byte(who+" has arrvied")); err != nil {
-			log.Printf("failed sending %s", err)
-		}
+	if err := cli.conn.WriteMessage(1, []byte("your id is "+cli.id)); err != nil {
+		log.Println(err)
 	}
+
 	entering <- cli
 
-	go usermanage()
 	go cli.sender()
 	go cli.readMessge()
 }
