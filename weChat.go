@@ -49,20 +49,6 @@ func usermanage() {
 	}
 }
 
-func handleConn(conn *websocket.Conn) {
-	cli := NewClient(conn)
-	who := cli.id
-	for cli := range clients {
-		if err := cli.conn.WriteMessage(1, []byte(who+" has arrvied")); err != nil {
-			log.Printf("failed sending %s", err)
-		}
-	}
-	entering <- cli
-
-	go cli.sender()
-	go cli.readMessge()
-}
-
 func (c *Client) readMessge() {
 	defer func() {
 		leaving <- c
@@ -75,7 +61,7 @@ func (c *Client) readMessge() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				log.Printf("error: %v", err)
 			}
-			return
+			break
 		}
 		c.send <- msg
 	}
@@ -116,8 +102,18 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cli := NewClient(conn)
+	who := cli.id
+	for cli := range clients {
+		if err := cli.conn.WriteMessage(1, []byte(who+" has arrvied")); err != nil {
+			log.Printf("failed sending %s", err)
+		}
+	}
+	entering <- cli
+
 	go usermanage()
-	go handleConn(conn)
+	go cli.sender()
+	go cli.readMessge()
 }
 
 func NewClient(conn *websocket.Conn) *Client {
