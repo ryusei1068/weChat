@@ -37,6 +37,10 @@ var (
 	private   = make(chan Message)
 )
 
+const (
+	maxMessageSize = 512
+)
+
 func usermanage() {
 	for {
 		select {
@@ -50,22 +54,12 @@ func usermanage() {
 			}
 		case msg := <-broadcast:
 			for client := range clients {
-				select {
-				case client.send <- msg:
-				default:
-					close(client.send)
-					delete(clients, client)
-				}
+				client.send <- msg
 			}
 		case msg := <-private:
 			for cli := range clients {
 				if cli.id == msg.Addr {
-					select {
-					case cli.send <- msg:
-					default:
-						close(cli.send)
-						delete(clients, cli)
-					}
+					cli.send <- msg
 				}
 			}
 		}
@@ -78,6 +72,7 @@ func (c *Client) readMessge() {
 		c.conn.Close()
 	}()
 	for {
+		c.conn.SetReadLimit(maxMessageSize)
 		var msg Message
 		err := c.conn.ReadJSON(&msg)
 		if err != nil {
