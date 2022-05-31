@@ -37,7 +37,7 @@ var (
 	private   = make(chan Message)
 )
 
-func (c *Client) usermanage() {
+func usermanage() {
 	for {
 		select {
 		case cli := <-entering:
@@ -95,6 +95,9 @@ func (c *Client) readMessge() {
 }
 
 func (c Client) writeMessge() {
+	defer func() {
+		c.conn.Close()
+	}()
 	for {
 		select {
 		case message, ok := <-c.send:
@@ -115,8 +118,6 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cli := NewClient(conn)
-
-	go cli.usermanage()
 
 	if err := cli.conn.WriteMessage(1, []byte("your id is "+cli.id)); err != nil {
 		log.Println(err)
@@ -148,6 +149,8 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 func main() {
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/chat", wshandler)
+
+	go usermanage()
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
