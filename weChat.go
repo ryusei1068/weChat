@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -38,10 +39,13 @@ var (
 )
 
 const (
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512
 )
 
-func usermanage() {
+func hub() {
 	for {
 		select {
 		case cli := <-entering:
@@ -71,8 +75,12 @@ func (c *Client) readMessge() {
 		leaving <- c
 		c.conn.Close()
 	}()
+
+	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+
 	for {
-		c.conn.SetReadLimit(maxMessageSize)
 		var msg Message
 		err := c.conn.ReadJSON(&msg)
 		if err != nil {
@@ -90,7 +98,9 @@ func (c *Client) readMessge() {
 }
 
 func (c Client) writeMessge() {
+	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		ticker.Stop()
 		c.conn.Close()
 	}()
 	for {
@@ -102,6 +112,11 @@ func (c Client) writeMessge() {
 				return
 			}
 			c.conn.WriteJSON(message)
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -114,7 +129,7 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 	}
 	cli := NewClient(conn)
 
-	if err := cli.conn.WriteMessage(1, []byte("your id is "+cli.id)); err != nil {
+	if err := cli.conn.WriteMessage(websocket.TextMessage, []byte("your id is "+cli.id)); err != nil {
 		log.Println(err)
 	}
 
@@ -125,7 +140,7 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 
 func NewClient(conn *websocket.Conn) *Client {
 	uuid := uuid.NewString()
-	return &Client{id: uuid, conn: conn, send: make(chan Message)}
+	return &Client{id: uuid, conn: conn, send: make(chan Message, 5)}
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +160,7 @@ func main() {
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/chat", wshandler)
 
-	go usermanage()
+	go hub()
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
