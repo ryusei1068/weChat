@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -43,6 +44,7 @@ const (
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512
+	CloseMessage   = -1
 )
 
 func hub() {
@@ -57,8 +59,8 @@ func hub() {
 				close(cli.send)
 			}
 		case msg := <-broadcast:
-			for client := range clients {
-				client.send <- msg
+			for cli := range clients {
+				cli.send <- msg
 			}
 		case msg := <-private:
 			for cli := range clients {
@@ -82,13 +84,23 @@ func (c *Client) readMessge() {
 
 	for {
 		var msg Message
-		err := c.conn.ReadJSON(&msg)
+
+		msgType, message, err := c.conn.ReadMessage()
+		if msgType == CloseMessage || err != nil {
+			break
+		}
+
+		if err = json.Unmarshal([]byte(string(message)), &msg); err != nil {
+			log.Printf("parse error : %s", err)
+		}
+
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				log.Printf("error: %v", err)
 			}
 			break
 		}
+
 		if msg.Addr == "public" {
 			broadcast <- msg
 		} else {
@@ -107,6 +119,7 @@ func (c Client) writeMessge() {
 		select {
 		case message, ok := <-c.send:
 			fmt.Println(message, ok)
+
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
