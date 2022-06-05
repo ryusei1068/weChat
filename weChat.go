@@ -22,20 +22,25 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	id    string
-	conn  *websocket.Conn
-	send  chan Message
-	name  string
-	pagex string
-	pagey string
+	id       string
+	conn     *websocket.Conn
+	send     chan interface{}
+	name     string
+	Position Position
 }
 
 type Message struct {
-	Type  string `json:"type"`
-	Addr  string `json:"addr,omitempty"`
-	Msg   string `json:"msg,omitempty"`
-	PageX string `json:"pagex,omitempty"`
-	PageY string `json:"pagey,omitempty"`
+	Type     string   `json:"type"`
+	Addr     string   `json:"addr,omitempty"`
+	Msg      string   `json:"msg,omitempty"`
+	PageX    int      `json:"pagex,omitempty"`
+	PageY    int      `json:"pagey,omitempty"`
+	Position Position `json:"position,omitempty"`
+}
+
+type Position struct {
+	PageX int `json:"pagex"`
+	PageY int `json:"pagey"`
 }
 
 var (
@@ -58,6 +63,9 @@ func hub() {
 	for {
 		select {
 		case cli := <-entering:
+			for cli := range clients {
+				cli.send <- Message{Type: "position", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}}
+			}
 			clients[cli] = true
 
 		case cli := <-leaving:
@@ -81,6 +89,11 @@ func hub() {
 			}
 		}
 	}
+}
+
+func (c *Client) updatePosition(pagex int, pagey int) {
+	c.Position.PageX = pagex
+	c.Position.PageY = pagey
 }
 
 func (c *Client) readMessge() {
@@ -113,6 +126,7 @@ func (c *Client) readMessge() {
 		} else if msg.Type == "private" {
 			private <- msg
 		} else if msg.Type == "position" {
+			c.updatePosition(msg.PageX, msg.PageY)
 			position <- msg
 		}
 	}
@@ -157,10 +171,12 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 	// }
 	// userid := cookie.Value
 	cli := NewClient(conn)
+	// connected new client
+	cli.conn.WriteJSON(Message{Type: "position", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
 
-	if err := cli.conn.WriteMessage(websocket.TextMessage, []byte("your id is "+cli.id)); err != nil {
-		log.Println(err)
-	}
+	// if err := cli.conn.WriteMessage(websocket.TextMessage, []byte("your id is "+cli.id)); err != nil {
+	// 	log.Println(err)
+	// }
 
 	entering <- cli
 	go cli.writeMessge()
@@ -169,7 +185,7 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 
 func NewClient(conn *websocket.Conn) *Client {
 	uuid := uuid.NewString()
-	return &Client{id: uuid, conn: conn, send: make(chan Message, 5)}
+	return &Client{id: uuid, conn: conn, send: make(chan interface{}, 5), Position: Position{PageX: 0, PageY: 0}}
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
