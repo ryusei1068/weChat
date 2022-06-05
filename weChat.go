@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -21,14 +22,20 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	id   string
-	conn *websocket.Conn
-	send chan Message
+	id    string
+	conn  *websocket.Conn
+	send  chan Message
+	name  string
+	pagex string
+	pagey string
 }
 
 type Message struct {
-	Addr string `json:"addr"`
-	Msg  string `json:"msg"`
+	Type  string `json:"type"`
+	Addr  string `json:"addr,omitempty"`
+	Msg   string `json:"msg,omitempty"`
+	PageX string `json:"pagex,omitempty"`
+	PageY string `json:"pagey,omitempty"`
 }
 
 var (
@@ -37,6 +44,7 @@ var (
 	clients   = make(map[*Client]bool)
 	broadcast = make(chan Message)
 	private   = make(chan Message)
+	position  = make(chan Message)
 )
 
 const (
@@ -44,7 +52,6 @@ const (
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512
-	CloseMessage   = -1
 )
 
 func hub() {
@@ -68,6 +75,10 @@ func hub() {
 					cli.send <- msg
 				}
 			}
+		case msg := <-position:
+			for cli := range clients {
+				cli.send <- msg
+			}
 		}
 	}
 }
@@ -84,9 +95,12 @@ func (c *Client) readMessge() {
 
 	for {
 		var msg Message
+		_, message, err := c.conn.ReadMessage()
 
-		msgType, message, err := c.conn.ReadMessage()
-		if msgType == CloseMessage || err != nil {
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
 			break
 		}
 
@@ -94,17 +108,12 @@ func (c *Client) readMessge() {
 			log.Printf("parse error : %s", err)
 		}
 
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				log.Printf("error: %v", err)
-			}
-			break
-		}
-
-		if msg.Addr == "public" {
+		if msg.Type == "broadcast" {
 			broadcast <- msg
-		} else {
+		} else if msg.Type == "private" {
 			private <- msg
+		} else if msg.Type == "position" {
+			position <- msg
 		}
 	}
 }
@@ -118,7 +127,7 @@ func (c Client) writeMessge() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			fmt.Println(message, ok)
+			log.Println(message, ok)
 
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -140,6 +149,13 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Upgrade failed %s ", err)
 		return
 	}
+
+	// cookie, err := r.Cookie("id")
+
+	// if err != nil {
+	// 	log.Fatal("Cookie: ", err)
+	// }
+	// userid := cookie.Value
 	cli := NewClient(conn)
 
 	if err := cli.conn.WriteMessage(websocket.TextMessage, []byte("your id is "+cli.id)); err != nil {
@@ -166,12 +182,30 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	// uuid := uuid.NewString()
+	// cookie := &http.Cookie{
+	// 	Name:  "id",
+	// 	Value: uuid,
+	// }
+	// http.SetCookie(w, cookie)
 	http.ServeFile(w, r, "index.html")
+}
+
+func getUserNameFromClient(w http.ResponseWriter, r *http.Request) {
+	log.Println(r.URL)
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, _ := io.ReadAll(r.Body)
+	fmt.Println(string(body))
 }
 
 func main() {
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/chat", wshandler)
+	http.HandleFunc("/username", getUserNameFromClient)
 
 	go hub()
 
