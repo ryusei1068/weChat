@@ -1,0 +1,306 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+
+</head>
+<style>
+    .sideMove {
+        margin-top: 100px;
+        animation: sideMove 4s infinite;
+    }
+    
+    @keyframes sideMove {
+        0% {
+            transform: translateY(0px);
+        }
+        25% {
+            transform: translateY(-100px);
+        }
+        100% {
+            transform: translateY(0px);
+        }
+    }
+    
+    .container {
+        background-color: black;
+        width: 100px;
+        height: 100px;
+        margin-right: 50px;
+    }
+    
+    .user {
+        border-radius: 50%;
+    }
+    
+    .drag-and-drop {
+        cursor: move;
+        position: absolute;
+        z-index: 1000;
+    }
+    
+    .drag {
+        z-index: 1001;
+    }
+    
+    .user-name {
+        color: white;
+        text-align: center;
+    }
+    
+    #users-space {
+        width: auto;
+        height: auto;
+    }
+</style>
+
+<body>
+    <div id="main">
+        <input type="text" value="" id="name" placeholder="your name" />
+        <input type="button" onClick="launchWebsocketClient();" value="Launch websocket client" />
+        <input type="button" onClick="closeWebsocketClient();" value="Close websocket client" />
+        <input type="button" onClick="clearLog();" value="Clear log" />
+        <p>
+            <span id="connectionState" style='color:red'>Disconnected</span>
+        </p>
+        <div>
+            <input type="text" value="" id="address" placeholder="address">
+            <input type="text" value="" id="message" placeholder="message" />
+            <input type="button" value="private message send" onClick="privateMessage()" />
+        </div>
+
+        <div>
+            <input type="text" value="" id="broadcast" placeholder="message" />
+            <input type="button" value="broadcast" onClick="broadcaset()" />
+        </div>
+    </div>
+
+    <div id="log">
+
+    </div>
+    <div id="users-space">
+    </div>
+</body>
+<script>
+    // websocket state
+    const socketConnecting = 0;
+    const socketOpen = 1;
+    const socketClosing = 2;
+    const socketClosed = 3
+    var ws;
+
+    function launchWebsocketClient() {
+        // var username = document.getElementById("name").value;
+        // document.getElementById("name").value = "";
+
+        // document.getElementsByClassName("user-name")[0].innerHTML = username
+
+        if ("WebSocket" in window) {
+            ws = new WebSocket("ws://localhost:8080/chat")
+            ws.onopen = function() {
+                document.getElementById("connectionState").innerHTML = "Connected";
+                document.getElementById("connectionState").style.color = "green";
+            };
+
+            ws.onmessage = function(evt) {
+                logText("Message received from websocket : " + evt.data);
+                var jsondata = JSON.parse(evt.data);
+
+                if (jsondata.type === "position") {
+                    appendNewUserIcon(jsondata.addr)
+                }
+            };
+
+            ws.onclose = function() {
+                document.getElementById("connectionState").innerHTML = "Disconnected";
+                document.getElementById("connectionState").style.color = "red";
+                logText("Connection has been closed");
+            };
+
+        } else {
+            alert("WebSocket is NOT supported by your Browser!")
+        }
+    }
+
+
+    function appendNewUserIcon(id) {
+        var userContainer = document.createElement('div')
+        userContainer.classList.add("container", "drag-and-drop", "user")
+        userContainer.setAttribute('id', id)
+
+        var username = document.createElement('div')
+        username.classList.add("user-name")
+
+        userContainer.append(username)
+
+        document.getElementById("users-space").append(userContainer)
+
+        // userContainer.addEventListener("ondragstart", dragstart)
+
+        userContainer.ondragstart = function() {
+            return false;
+        };
+
+        userContainer.onmousedown = function(event) {
+            let shiftX = event.clientX - userContainer.getBoundingClientRect().left;
+            let shiftY = event.clientY - userContainer.getBoundingClientRect().top;
+
+            userContainer.style.position = 'absolute';
+            userContainer.style.zIndex = 1000;
+
+            document.getElementById("users-space").append(userContainer);
+
+            moveAt(event.pageX, event.pageY);
+
+            function moveAt(pageX, pageY) {
+                userContainer.style.left = pageX - shiftX + 'px';
+                userContainer.style.top = pageY - shiftY + 'px';
+            }
+
+            function onMouseMove(event) {
+                moveAt(event.pageX, event.pageY);
+
+                // var userid = document.getElementById("userid").value
+                // console.log(userid);
+                const position = {
+                    type: "position",
+                    addr: userid,
+                    position: {
+                        pagex: event.pageX,
+                        pagey: event.pageY,
+                    },
+                }
+                if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
+                    ws.send(JSON.stringify(position))
+                }
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+
+            userContainer.onmouseup = function() {
+                document.removeEventListener('mousemove', onMouseMove);
+                userContainer.onmouseup = null;
+            };
+
+        }
+
+        /*
+            <div class="container drag-and-drop" id="">
+                <div class="user-name"></div>
+            </div>
+        */
+    }
+
+    function closeWebsocketClient() {
+        // document.getElementById("user").style.display = "none";
+        document.getElementsByClassName("user-name")[0].innerHTML = "";
+        if (typeof(ws) != "undefined") ws.close(1000, "Work complete");;
+    }
+
+    function logText(text) {
+        var currentdate = new Date();
+        var datetime = "[" +
+            currentdate.getHours() + ":" +
+            currentdate.getMinutes() + ":" +
+            currentdate.getSeconds() + "]";
+
+        document.getElementById("log").innerHTML += datetime + " " + text + "<br/>";
+    }
+
+    function clearLog() {
+        document.getElementById("log").innerHTML = "";
+    }
+
+    function privateMessage() {
+        var address = document.getElementById("address").value
+        var messge = document.getElementById("message").value
+        if (address.length === 0) {
+            return
+        }
+
+        document.getElementById("address").value = "";
+        document.getElementById("message").value = "";
+
+        var message = {
+            type: "private",
+            addr: address,
+            msg: messge
+        };
+
+        if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
+            ws.send(JSON.stringify(message));
+        }
+    }
+
+    function broadcaset() {
+        var message = document.getElementById("broadcast").value
+        if (message.length === 0) {
+            return
+        }
+
+        document.getElementById("broadcast").value = "";
+
+        var message = {
+            type: "broadcast",
+            msg: message
+        };
+
+        if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
+            ws.send(JSON.stringify(message));
+        }
+    }
+
+
+    function mousedown(event) {
+
+
+        let shiftX = event.clientX - user.getBoundingClientRect().left;
+        let shiftY = event.clientY - user.getBoundingClientRect().top;
+
+        user.style.position = 'absolute';
+        user.style.zIndex = 1000;
+
+        document.getElementById("users-space").append(user);
+
+        moveAt(event.pageX, event.pageY);
+
+        function moveAt(pageX, pageY) {
+            user.style.left = pageX - shiftX + 'px';
+            user.style.top = pageY - shiftY + 'px';
+        }
+
+        function onMouseMove(event) {
+            moveAt(event.pageX, event.pageY);
+
+            var userid = document.getElementById("userid").value
+            console.log(userid);
+            const position = {
+                type: "position",
+                addr: userid,
+                position: {
+                    pagex: event.pageX,
+                    pagey: event.pageY,
+                },
+            }
+            if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
+                ws.send(JSON.stringify(position))
+            }
+        }
+
+        document.addEventListener('mousemove', onMouseMove);
+
+        user.onmouseup = function() {
+            document.removeEventListener('mousemove', onMouseMove);
+            user.onmouseup = null;
+        };
+    };
+
+    function dragstart() {
+        return false
+    }
+    // user.ondragstart = function() {
+    //     return false;
+    // };
+</script>
+
+</html>
