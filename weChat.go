@@ -64,8 +64,11 @@ func hub() {
 		select {
 		case newcli := <-entering:
 			for cli := range clients {
-				cli.send <- Message{Type: "position", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
+				var pos Message = Message{Type: "position", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
+				cli.send <- pos
+				newcli.send <- pos
 			}
+
 			clients[newcli] = true
 
 		case cli := <-leaving:

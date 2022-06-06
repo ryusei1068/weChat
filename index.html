@@ -123,20 +123,18 @@
     }
 
 
-    function appendNewUserIcon(id) {
-        var userContainer = document.createElement('div')
-        userContainer.classList.add("container", "drag-and-drop", "user")
-        userContainer.setAttribute('id', id)
+    const divTags = document.getElementsByTagName('div')
 
-        var username = document.createElement('div')
-        username.classList.add("user-name")
+    function getActiveElement() {
+        alert(document.activeElement.id);
+    }
 
-        userContainer.append(username)
+    Array.from(divTags).forEach(divTag => {
+        divTag.addEventListener('mouseup', getActiveElement, false)
+    })
 
-        document.getElementById("users-space").append(userContainer)
 
-        // userContainer.addEventListener("ondragstart", dragstart)
-
+    function startMouseMove(userContainer) {
         userContainer.ondragstart = function() {
             return false;
         };
@@ -160,8 +158,9 @@
             function onMouseMove(event) {
                 moveAt(event.pageX, event.pageY);
 
-                // var userid = document.getElementById("userid").value
-                // console.log(userid);
+
+                var userid = userContainer.id
+                console.log(userid);
                 const position = {
                     type: "position",
                     addr: userid,
@@ -181,15 +180,31 @@
                 document.removeEventListener('mousemove', onMouseMove);
                 userContainer.onmouseup = null;
             };
-
         }
-
-        /*
-            <div class="container drag-and-drop" id="">
-                <div class="user-name"></div>
-            </div>
-        */
     }
+
+    function appendNewUserIcon(id) {
+        var userContainer = document.createElement('div')
+        userContainer.classList.add("container", "drag-and-drop", "user")
+        userContainer.setAttribute('id', id)
+
+        var username = document.createElement('div')
+        username.classList.add("user-name")
+
+        userContainer.append(username)
+
+        document.getElementById("users-space").append(userContainer)
+
+        startMouseMove(userContainer)
+
+        // userContainer.addEventListener("ondragstart", dragstart)
+    }
+
+    /*
+        <div class="container drag-and-drop" id="">
+            <div class="user-name"></div>
+        </div>
+    */
 
     function closeWebsocketClient() {
         // document.getElementById("user").style.display = "none";
