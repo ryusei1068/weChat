@@ -27,6 +27,7 @@ type Client struct {
 	send     chan interface{}
 	name     string
 	Position Position
+	Friends  map[string]Friends
 }
 
 type Message struct {
@@ -36,6 +37,11 @@ type Message struct {
 	PageX    int      `json:"pagex,omitempty"`
 	PageY    int      `json:"pagey,omitempty"`
 	Position Position `json:"position,omitempty"`
+}
+
+type Friends struct {
+	id       string
+	Position Position
 }
 
 type Position struct {
@@ -64,7 +70,8 @@ func hub() {
 		select {
 		case newcli := <-entering:
 			for cli := range clients {
-				var pos Message = Message{Type: "position", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
+				var pos Message = Message{Type: "move", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
+				// cli.Friends[newcli.id] = Friends{id: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
 				cli.send <- pos
 				newcli.send <- pos
 			}
@@ -88,7 +95,9 @@ func hub() {
 			}
 		case msg := <-position:
 			for cli := range clients {
-				cli.send <- msg
+				if msg.Addr != cli.id {
+					cli.send <- msg
+				}
 			}
 		}
 	}
@@ -175,7 +184,7 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 	// userid := cookie.Value
 	cli := NewClient(conn)
 	// connected new client
-	cli.conn.WriteJSON(Message{Type: "position", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
+	cli.conn.WriteJSON(Message{Type: "newclient", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
 
 	// if err := cli.conn.WriteMessage(websocket.TextMessage, []byte("your id is "+cli.id)); err != nil {
 	// 	log.Println(err)

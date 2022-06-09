@@ -103,11 +103,14 @@
             };
 
             ws.onmessage = function(evt) {
-                logText("Message received from websocket : " + evt.data);
+                // logText("Message received from websocket : " + evt.data);
                 var jsondata = JSON.parse(evt.data);
 
-                if (jsondata.type === "position") {
+                if (jsondata.type === "newclient") {
                     appendNewUserIcon(jsondata.addr)
+                }
+                if (jsondata.type === "move") {
+                    startmove(jsondata.addr)
                 }
             };
 
@@ -122,19 +125,33 @@
         }
     }
 
+    function appendNewUserIcon(id) {
+        var userContainer = document.createElement('div')
+        userContainer.classList.add("container", "drag-and-drop", "user")
+        userContainer.setAttribute('id', id)
 
-    const divTags = document.getElementsByTagName('div')
+        var username = document.createElement('div')
+        username.classList.add("user-name")
 
-    function getActiveElement() {
-        alert(document.activeElement.id);
+        userContainer.append(username)
+
+        // let users = document.getElementById("users-space")
+        // console.log(users);
+
+        // function getActiveElement() {
+        //     alert(document.activeElement.id);
+        // }
+        // Array.from(users).forEach(user => {
+        //     user.addEventListener('mouseup', getActiveElement, false)
+        // })
+
+        document.getElementById("users-space").append(userContainer)
+        startmove(id)
     }
 
-    Array.from(divTags).forEach(divTag => {
-        divTag.addEventListener('mouseup', getActiveElement, false)
-    })
+    function startmove(id) {
+        var userContainer = document.getElementById(id);
 
-
-    function startMouseMove(userContainer) {
         userContainer.ondragstart = function() {
             return false;
         };
@@ -160,7 +177,6 @@
 
 
                 var userid = userContainer.id
-                console.log(userid);
                 const position = {
                     type: "position",
                     addr: userid,
@@ -183,32 +199,8 @@
         }
     }
 
-    function appendNewUserIcon(id) {
-        var userContainer = document.createElement('div')
-        userContainer.classList.add("container", "drag-and-drop", "user")
-        userContainer.setAttribute('id', id)
-
-        var username = document.createElement('div')
-        username.classList.add("user-name")
-
-        userContainer.append(username)
-
-        document.getElementById("users-space").append(userContainer)
-
-        startMouseMove(userContainer)
-
-        // userContainer.addEventListener("ondragstart", dragstart)
-    }
-
-    /*
-        <div class="container drag-and-drop" id="">
-            <div class="user-name"></div>
-        </div>
-    */
-
     function closeWebsocketClient() {
-        // document.getElementById("user").style.display = "none";
-        document.getElementsByClassName("user-name")[0].innerHTML = "";
+        document.getElementById("users-space").innerHTML = "";
         if (typeof(ws) != "undefined") ws.close(1000, "Work complete");;
     }
 
@@ -263,59 +255,7 @@
         if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
             ws.send(JSON.stringify(message));
         }
-    }
-
-
-    function mousedown(event) {
-
-
-        let shiftX = event.clientX - user.getBoundingClientRect().left;
-        let shiftY = event.clientY - user.getBoundingClientRect().top;
-
-        user.style.position = 'absolute';
-        user.style.zIndex = 1000;
-
-        document.getElementById("users-space").append(user);
-
-        moveAt(event.pageX, event.pageY);
-
-        function moveAt(pageX, pageY) {
-            user.style.left = pageX - shiftX + 'px';
-            user.style.top = pageY - shiftY + 'px';
-        }
-
-        function onMouseMove(event) {
-            moveAt(event.pageX, event.pageY);
-
-            var userid = document.getElementById("userid").value
-            console.log(userid);
-            const position = {
-                type: "position",
-                addr: userid,
-                position: {
-                    pagex: event.pageX,
-                    pagey: event.pageY,
-                },
-            }
-            if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
-                ws.send(JSON.stringify(position))
-            }
-        }
-
-        document.addEventListener('mousemove', onMouseMove);
-
-        user.onmouseup = function() {
-            document.removeEventListener('mousemove', onMouseMove);
-            user.onmouseup = null;
-        };
     };
-
-    function dragstart() {
-        return false
-    }
-    // user.ondragstart = function() {
-    //     return false;
-    // };
 </script>
 
 </html>
