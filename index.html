@@ -166,10 +166,6 @@
     function startmove(id) {
         var userContainer = document.getElementById(id);
 
-        userContainer.ondragstart = function() {
-            return false;
-        };
-
         userContainer.onmousedown = function(event) {
             // let shiftX = event.clientX - userContainer.getBoundingClientRect().left;
             // let shiftY = event.clientY - userContainer.getBoundingClientRect().top;
@@ -205,11 +201,16 @@
 
             userContainer.addEventListener('mousemove', onMouseMove);
 
-            userContainer.onmouseup = function() {
-                userContainer.removeEventListener('mousemove', onMouseMove);
+            document.onmouseup = function() {
+                document.removeEventListener('mousemove', onMouseMove);
                 userContainer.onmouseup = null;
             };
         }
+
+        userContainer.ondragstart = function() {
+            return false;
+        };
+
     }
 
     function closeWebsocketClient() {
@@ -230,45 +231,6 @@
     function clearLog() {
         document.getElementById("log").innerHTML = "";
     }
-
-    function privateMessage() {
-        var address = document.getElementById("address").value
-        var messge = document.getElementById("message").value
-        if (address.length === 0) {
-            return
-        }
-
-        document.getElementById("address").value = "";
-        document.getElementById("message").value = "";
-
-        var message = {
-            type: "private",
-            addr: address,
-            msg: messge
-        };
-
-        if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
-            ws.send(JSON.stringify(message));
-        }
-    }
-
-    function broadcaset() {
-        var message = document.getElementById("broadcast").value
-        if (message.length === 0) {
-            return
-        }
-
-        document.getElementById("broadcast").value = "";
-
-        var message = {
-            type: "broadcast",
-            msg: message
-        };
-
-        if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
-            ws.send(JSON.stringify(message));
-        }
-    };
 </script>
 
 </html>

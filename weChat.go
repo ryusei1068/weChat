@@ -73,7 +73,6 @@ func hub() {
 				var pos Message = Message{Type: "move", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
 				// cli.Friends[newcli.id] = Friends{id: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
 				cli.send <- pos
-				newcli.send <- pos
 			}
 
 			clients[newcli] = true
