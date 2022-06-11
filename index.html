@@ -86,7 +86,7 @@
     const socketConnecting = 0;
     const socketOpen = 1;
     const socketClosing = 2;
-    const socketClosed = 3
+    const socketClosed = 3;
     var ws;
 
     function launchWebsocketClient() {
@@ -105,12 +105,12 @@
             ws.onmessage = function(evt) {
                 // logText("Message received from websocket : " + evt.data);
                 var jsondata = JSON.parse(evt.data);
-
                 if (jsondata.type === "newclient") {
-                    appendNewUserIcon(jsondata.addr)
+                    appendNewUserIcon(jsondata.addr);
+                    startmove(jsondata.addr);
                 }
                 if (jsondata.type === "move") {
-                    startmove(jsondata.addr)
+                    movedClient(jsondata.addr, jsondata.position.pagex, jsondata.position.pagey)
                 }
             };
 
@@ -123,6 +123,21 @@
         } else {
             alert("WebSocket is NOT supported by your Browser!")
         }
+    }
+
+    function movedClient(id, pagex, pagey) {
+        var isExist = document.getElementById(id);
+
+        if (isExist === null) {
+            appendNewUserIcon(id);
+        }
+
+        var client = document.getElementById(id);
+
+        client.style.position = 'absolute';
+        client.style.zIndex = 1000;
+        client.style.left = pagex + "px";
+        client.style.top = pagey + "px";
     }
 
     function appendNewUserIcon(id) {
@@ -145,8 +160,7 @@
         //     user.addEventListener('mouseup', getActiveElement, false)
         // })
 
-        document.getElementById("users-space").append(userContainer)
-        startmove(id)
+        document.getElementById("users-space").append(userContainer);
     }
 
     function startmove(id) {
@@ -157,15 +171,15 @@
         };
 
         userContainer.onmousedown = function(event) {
-            let shiftX = event.clientX - userContainer.getBoundingClientRect().left;
-            let shiftY = event.clientY - userContainer.getBoundingClientRect().top;
+            // let shiftX = event.clientX - userContainer.getBoundingClientRect().left;
+            // let shiftY = event.clientY - userContainer.getBoundingClientRect().top;
 
-            userContainer.style.position = 'absolute';
-            userContainer.style.zIndex = 1000;
+            // userContainer.style.position = 'absolute';
+            // userContainer.style.zIndex = 1000;
 
-            document.getElementById("users-space").append(userContainer);
+            // document.getElementById("users-space").append(userContainer);
 
-            moveAt(event.pageX, event.pageY);
+            // moveAt(event.pageX, event.pageY);
 
             function moveAt(pageX, pageY) {
                 userContainer.style.left = pageX - shiftX + 'px';
@@ -173,12 +187,11 @@
             }
 
             function onMouseMove(event) {
-                moveAt(event.pageX, event.pageY);
-
+                // moveAt(event.pageX, event.pageY);
 
                 var userid = userContainer.id
                 const position = {
-                    type: "position",
+                    type: "move",
                     addr: userid,
                     position: {
                         pagex: event.pageX,
@@ -190,10 +203,10 @@
                 }
             }
 
-            document.addEventListener('mousemove', onMouseMove);
+            userContainer.addEventListener('mousemove', onMouseMove);
 
             userContainer.onmouseup = function() {
-                document.removeEventListener('mousemove', onMouseMove);
+                userContainer.removeEventListener('mousemove', onMouseMove);
                 userContainer.onmouseup = null;
             };
         }

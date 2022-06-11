@@ -95,9 +95,8 @@ func hub() {
 			}
 		case msg := <-position:
 			for cli := range clients {
-				if msg.Addr != cli.id {
-					cli.send <- msg
-				}
+				fmt.Println("recived msg from position channel ", msg.Position.PageX)
+				cli.send <- msg
 			}
 		}
 	}
@@ -137,8 +136,9 @@ func (c *Client) readMessge() {
 			broadcast <- msg
 		} else if msg.Type == "private" {
 			private <- msg
-		} else if msg.Type == "position" {
-			c.updatePosition(msg.PageX, msg.PageY)
+		} else if msg.Type == "move" {
+			fmt.Println(msg)
+			c.updatePosition(msg.Position.PageX, msg.Position.PageY)
 			position <- msg
 		}
 	}
