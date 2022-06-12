@@ -101,11 +101,11 @@
                 // logText("Message received from websocket : " + evt.data);
                 var jsondata = JSON.parse(evt.data);
                 if (jsondata.type === "newclient") {
-                    appendNewUserIcon(jsondata.addr);
+                    appendNewUserIcon(jsondata.addr, "red");
                     startmove(jsondata.addr);
                 }
                 if (jsondata.type === "move") {
-                    movedClient(jsondata.addr, jsondata.position.pagex, jsondata.position.pagey)
+                    movedClient(jsondata.addr, jsondata.position.pagex, jsondata.position.pagey);
                 }
             };
 
@@ -116,7 +116,7 @@
             };
 
         } else {
-            alert("WebSocket is NOT supported by your Browser!")
+            alert("WebSocket is NOT supported by your Browser!");
         }
     }
 
@@ -124,7 +124,7 @@
         var isExist = document.getElementById(id);
 
         if (isExist === null) {
-            appendNewUserIcon(id);
+            appendNewUserIcon(id, "black");
         }
 
         var client = document.getElementById(id);
@@ -133,26 +133,16 @@
         client.style.top = pagey + "px";
     }
 
-    function appendNewUserIcon(id) {
-        var userContainer = document.createElement('div')
-        userContainer.classList.add("container", "drag-and-drop", "user")
-        userContainer.setAttribute('id', id)
+    function appendNewUserIcon(id, iconColor) {
+        var userContainer = document.createElement('div');
+        userContainer.classList.add("container", "drag-and-drop", "user");
+        userContainer.setAttribute('id', id);
+        userContainer.style.backgroundColor = iconColor;
 
-        var username = document.createElement('div')
-        username.classList.add("user-name")
+        var username = document.createElement('div');
+        username.classList.add("user-name");
 
-        userContainer.append(username)
-
-        // let users = document.getElementById("users-space")
-        // console.log(users);
-
-        // function getActiveElement() {
-        //     alert(document.activeElement.id);
-        // }
-        // Array.from(users).forEach(user => {
-        //     user.addEventListener('mouseup', getActiveElement, false)
-        // })
-
+        userContainer.append(username);
         document.getElementById("users-space").append(userContainer);
     }
 
@@ -186,24 +176,20 @@
                 }
             }
 
-
             function onMouseMove(event) {
                 moveAt(event.pageX, event.pageY);
             }
-
             document.addEventListener('mousemove', onMouseMove);
 
             user.onmouseup = function() {
                 document.removeEventListener('mousemove', onMouseMove);
                 user.onmouseup = null;
             };
-
         };
 
         user.ondragstart = function() {
             return false;
         };
-
     }
 
     function closeWebsocketClient() {

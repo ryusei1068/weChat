@@ -92,7 +92,6 @@ func hub() {
 			}
 		case msg := <-position:
 			for cli := range clients {
-				fmt.Println("recived msg from position channel ", msg.Position.PageX)
 				cli.send <- msg
 			}
 		}
