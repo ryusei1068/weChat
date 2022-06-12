@@ -90,11 +90,6 @@
     var ws;
 
     function launchWebsocketClient() {
-        // var username = document.getElementById("name").value;
-        // document.getElementById("name").value = "";
-
-        // document.getElementsByClassName("user-name")[0].innerHTML = username
-
         if ("WebSocket" in window) {
             ws = new WebSocket("ws://localhost:8080/chat")
             ws.onopen = function() {
@@ -134,8 +129,6 @@
 
         var client = document.getElementById(id);
 
-        client.style.position = 'absolute';
-        client.style.zIndex = 1000;
         client.style.left = pagex + "px";
         client.style.top = pagey + "px";
     }
@@ -164,50 +157,50 @@
     }
 
     function startmove(id) {
-        var userContainer = document.getElementById(id);
+        var user = document.getElementById(id);
 
-        userContainer.onmousedown = function(event) {
-            // let shiftX = event.clientX - userContainer.getBoundingClientRect().left;
-            // let shiftY = event.clientY - userContainer.getBoundingClientRect().top;
+        user.onmousedown = function(event) {
 
-            // userContainer.style.position = 'absolute';
-            // userContainer.style.zIndex = 1000;
+            let shiftX = event.clientX - user.getBoundingClientRect().left;
+            let shiftY = event.clientY - user.getBoundingClientRect().top;
 
-            // document.getElementById("users-space").append(userContainer);
+            user.style.position = 'absolute';
+            user.style.zIndex = 1000;
+            document.body.append(user);
 
-            // moveAt(event.pageX, event.pageY);
+            moveAt(event.pageX, event.pageY);
 
             function moveAt(pageX, pageY) {
-                userContainer.style.left = pageX - shiftX + 'px';
-                userContainer.style.top = pageY - shiftY + 'px';
-            }
-
-            function onMouseMove(event) {
-                // moveAt(event.pageX, event.pageY);
-
-                var userid = userContainer.id
-                const position = {
+                var userid = user.id;
+                const moved = {
                     type: "move",
                     addr: userid,
                     position: {
-                        pagex: event.pageX,
-                        pagey: event.pageY,
+                        pagex: pageX - shiftX,
+                        pagey: pageY - shiftY,
                     },
-                }
-                if (typeof(ws) != "undefined" && socketOpen === ws.readyState) {
-                    ws.send(JSON.stringify(position))
+                };
+
+                if (typeof(ws) != undefined && socketOpen === ws.readyState) {
+                    ws.send(JSON.stringify(moved));
                 }
             }
 
-            userContainer.addEventListener('mousemove', onMouseMove);
 
-            document.onmouseup = function() {
+            function onMouseMove(event) {
+                moveAt(event.pageX, event.pageY);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+
+            user.onmouseup = function() {
                 document.removeEventListener('mousemove', onMouseMove);
-                userContainer.onmouseup = null;
+                user.onmouseup = null;
             };
-        }
 
-        userContainer.ondragstart = function() {
+        };
+
+        user.ondragstart = function() {
             return false;
         };
 

@@ -34,8 +34,6 @@ type Message struct {
 	Type     string   `json:"type"`
 	Addr     string   `json:"addr,omitempty"`
 	Msg      string   `json:"msg,omitempty"`
-	PageX    int      `json:"pagex,omitempty"`
-	PageY    int      `json:"pagey,omitempty"`
 	Position Position `json:"position,omitempty"`
 }
 
@@ -45,8 +43,8 @@ type Friends struct {
 }
 
 type Position struct {
-	PageX int `json:"pagex"`
-	PageY int `json:"pagey"`
+	PageX float64 `json:"pagex"`
+	PageY float64 `json:"pagey"`
 }
 
 var (
@@ -101,7 +99,7 @@ func hub() {
 	}
 }
 
-func (c *Client) updatePosition(pagex int, pagey int) {
+func (c *Client) updatePosition(pagex, pagey float64) {
 	c.Position.PageX = pagex
 	c.Position.PageY = pagey
 }
@@ -136,7 +134,6 @@ func (c *Client) readMessge() {
 		} else if msg.Type == "private" {
 			private <- msg
 		} else if msg.Type == "move" {
-			fmt.Println(msg)
 			c.updatePosition(msg.Position.PageX, msg.Position.PageY)
 			position <- msg
 		}
