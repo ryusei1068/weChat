@@ -22,25 +22,17 @@
         }
     }
     
-    .container {
-        background-color: black;
+    .user {
+        border-radius: 50%;
         width: 100px;
         height: 100px;
         margin-right: 50px;
-    }
-    
-    .user {
-        border-radius: 50%;
     }
     
     .drag-and-drop {
         cursor: move;
         position: absolute;
         z-index: 1000;
-    }
-    
-    .drag {
-        z-index: 1001;
     }
     
     .user-name {
@@ -107,6 +99,9 @@
                 if (jsondata.type === "move") {
                     movedClient(jsondata.addr, jsondata.position.pagex, jsondata.position.pagey);
                 }
+                if (jsondata.type === "leaved") {
+                    removeUserIcon(jsondata.addr)
+                }
             };
 
             ws.onclose = function() {
@@ -118,6 +113,11 @@
         } else {
             alert("WebSocket is NOT supported by your Browser!");
         }
+    }
+
+    function removeUserIcon(id) {
+        var ele = document.getElementById(id);
+        ele.remove();
     }
 
     function movedClient(id, pagex, pagey) {
@@ -154,9 +154,7 @@
             let shiftX = event.clientX - user.getBoundingClientRect().left;
             let shiftY = event.clientY - user.getBoundingClientRect().top;
 
-            user.style.position = 'absolute';
-            user.style.zIndex = 1000;
-            document.body.append(user);
+            document.getElementById('users-space').append(user);
 
             moveAt(event.pageX, event.pageY);
 

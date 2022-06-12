@@ -69,7 +69,6 @@ func hub() {
 		case newcli := <-entering:
 			for cli := range clients {
 				var pos Message = Message{Type: "move", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
-				// cli.Friends[newcli.id] = Friends{id: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
 				cli.send <- pos
 			}
 
@@ -79,6 +78,10 @@ func hub() {
 			if _, ok := clients[cli]; ok {
 				delete(clients, cli)
 				close(cli.send)
+				var msg Message = Message{Type: "leaved", Addr: cli.id}
+				for cli := range clients {
+					cli.send <- msg
+				}
 			}
 		case msg := <-broadcast:
 			for cli := range clients {
@@ -118,7 +121,7 @@ func (c *Client) readMessge() {
 		_, message, err := c.conn.ReadMessage()
 
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
 			}
 			break
