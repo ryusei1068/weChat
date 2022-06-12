@@ -1,0 +1,22 @@
+.user {
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    margin-right: 50px;
+}
+
+.drag-and-drop {
+    cursor: move;
+    position: absolute;
+    z-index: 1000;
+}
+
+.user-name {
+    color: white;
+    text-align: center;
+}
+
+#users-space {
+    width: auto;
+    height: auto;
+}

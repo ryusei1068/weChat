@@ -214,7 +214,7 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 	// 	Value: uuid,
 	// }
 	// http.SetCookie(w, cookie)
-	http.ServeFile(w, r, "index.html")
+	//http.ServeFile(w, r, "index.html")
 }
 
 func getUserNameFromClient(w http.ResponseWriter, r *http.Request) {
@@ -229,9 +229,12 @@ func getUserNameFromClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", serveHome)
+
+	//	http.HandleFunc("/", serveHome)
+	http.Handle("/", http.FileServer(http.Dir("root/")))
+	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	http.HandleFunc("/chat", wshandler)
-	http.HandleFunc("/username", getUserNameFromClient)
+	// http.HandleFunc("/username", getUserNameFromClient)
 
 	go hub()
 
