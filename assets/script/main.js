@@ -4,9 +4,10 @@ const socketOpen = 1;
 const socketClosing = 2;
 const socketClosed = 3;
 var ws;
+var username = "";
 
 function launchWebsocketClient() {
-    var username = document.getElementById("name").value;
+    username = document.getElementById("name").value;
     if (username.length <= 0) {
         alert("please, username")
         return
@@ -19,7 +20,7 @@ function launchWebsocketClient() {
 function connectToWebSocketServer(username) {
 
     if ("WebSocket" in window) {
-        ws = new WebSocket("ws://localhost:8080/chat")
+        ws = new WebSocket(`ws://${document.location.host}/chat`)
         ws.onopen = function() {
             document.getElementById("connectionState").innerHTML = "Connected";
             document.getElementById("connectionState").style.color = "green";
@@ -43,8 +44,10 @@ function connectToWebSocketServer(username) {
         ws.onclose = function(event) {
             document.getElementById("connectionState").innerHTML = "Disconnected";
             document.getElementById("connectionState").style.color = "red";
-            console.log(event.wasClean);
-            logText("Connection has been closed");
+            alert("Connection has been closed");
+            if (!event.wasClean) {
+                location.reload();
+            }
         };
 
     } else {
@@ -62,6 +65,9 @@ function movedClient(id, pagex, pagey) {
 
     if (isExist === null) {
         appendNewUserIcon(id, "black");
+        document.getElementById(id).addEventListener("click", function() {
+            console.log(id);
+        })
     }
 
     var client = document.getElementById(id);
@@ -146,4 +152,20 @@ function logText(text) {
 
 function clearLog() {
     document.getElementById("log").innerHTML = "";
+}
+
+const buttonOpen = document.getElementById('modalOpen');
+const modal = document.getElementById('easyModal');
+const buttonClose = document.getElementsByClassName('modalClose')[0];
+
+buttonOpen.addEventListener('click', modalOpen);
+
+function modalOpen() {
+    modal.style.display = 'block';
+}
+
+buttonClose.addEventListener('click', modalClose);
+
+function modalClose() {
+    modal.style.display = 'none';
 }

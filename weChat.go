@@ -142,7 +142,7 @@ func (c *Client) readMessge() {
 	}
 }
 
-func (c Client) writeMessge() {
+func (c *Client) writeMessge() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -232,6 +232,7 @@ func main() {
 
 	//	http.HandleFunc("/", serveHome)
 	http.Handle("/", http.FileServer(http.Dir("root/")))
+
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	http.HandleFunc("/chat", wshandler)
 	// http.HandleFunc("/username", getUserNameFromClient)
