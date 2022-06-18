@@ -65,9 +65,6 @@ function movedClient(id, pagex, pagey) {
 
     if (isExist === null) {
         appendNewUserIcon(id, "black");
-        document.getElementById(id).addEventListener("click", function() {
-            console.log(id);
-        })
     }
 
     var client = document.getElementById(id);
@@ -78,17 +75,59 @@ function movedClient(id, pagex, pagey) {
 
 function appendNewUserIcon(id, iconColor, name) {
     var userContainer = document.createElement('div');
-    userContainer.classList.add("drag-and-drop", "user");
-    userContainer.setAttribute('id', id);
-    userContainer.style.backgroundColor = iconColor;
+    userContainer.classList.add("d-flex", "drag-and-drop");
+    userContainer.setAttribute("id", id)
+
+    var userIcon = document.createElement("div");
+    userIcon.classList.add("user");
+    userIcon.style.backgroundColor = iconColor;
 
     var username = document.createElement('div');
     username.classList.add("user-name");
     username.innerHTML = name;
+    userIcon.append(username);
+    userContainer.append(userIcon);
 
-    userContainer.append(username);
+    if ("black" === iconColor) {
+        mailIcon = document.createElement('i');
+        mailIcon.classList.add('bi', 'bi-envelope');
+        userContainer.append(mailIcon);
+        mailIcon.addEventListener("click", openModalWindow);
+    }
+
     document.getElementById("users-space").append(userContainer);
 }
+
+
+function openModalWindow(event) {
+    var chatWindow = document.getElementById("modal");
+    console.log(event.target.parentNode.id);
+    var container = document.createElement("div");
+    document.getElementById("users-space").style.display = "none";
+
+    var inputtag = document.createElement("input");
+
+    var sendButton = document.createElement('button');
+    sendButton.classList.add("btn", "btn-outline-primary");
+    sendButton.innerHTML = "send";
+
+    var closebutton = document.createElement('button');
+    closebutton.classList.add("btn", 'btn-primary');
+    closebutton.innerHTML = "closeModal";
+
+    chatWindow.append(inputtag, sendButton, closebutton);
+    closebutton.addEventListener('click', closeModalWindow);
+    sendButton.addEventListener("click", function() {
+        var msg
+    })
+}
+
+function closeModalWindow(event) {
+    document.getElementById("users-space").style.display = "block";
+
+    document.getElementById('modal').innerHTML = '';
+}
+
 
 function startmove(id) {
     var user = document.getElementById(id);
@@ -98,19 +137,25 @@ function startmove(id) {
         let shiftX = event.clientX - user.getBoundingClientRect().left;
         let shiftY = event.clientY - user.getBoundingClientRect().top;
 
-        document.getElementById('users-space').append(user);
+        document.getElementById("users-space").append(user);
 
         moveAt(event.pageX, event.pageY);
 
         function moveAt(pageX, pageY) {
             var userid = user.id;
+
+            const windowWidth = document.documentElement.clientWidth;
+            const windowHeight = document.documentElement.clientHeight;
             const moved = {
                 type: "move",
                 addr: userid,
                 position: {
                     pagex: pageX - shiftX,
                     pagey: pageY - shiftY,
+                    height: windowHeight,
+                    width: windowWidth,
                 },
+
             };
 
             if (typeof(ws) != undefined && socketOpen === ws.readyState) {
@@ -120,6 +165,12 @@ function startmove(id) {
 
         function onMouseMove(event) {
             moveAt(event.pageX, event.pageY);
+
+            user.hidden = true;
+            let elemBelow = document.elementFromPoint(event.clientX, event.clientY);
+            user.hidden = false;
+
+            if (!elemBelow) return;
         }
         document.addEventListener('mousemove', onMouseMove);
 
@@ -138,34 +189,4 @@ function startmove(id) {
 function closeWebsocketClient() {
     document.getElementById("users-space").innerHTML = "";
     if (typeof(ws) != "undefined") ws.close(1000, "Work complete");;
-}
-
-function logText(text) {
-    var currentdate = new Date();
-    var datetime = "[" +
-        currentdate.getHours() + ":" +
-        currentdate.getMinutes() + ":" +
-        currentdate.getSeconds() + "]";
-
-    document.getElementById("log").innerHTML += datetime + " " + text + "<br/>";
-}
-
-function clearLog() {
-    document.getElementById("log").innerHTML = "";
-}
-
-const buttonOpen = document.getElementById('modalOpen');
-const modal = document.getElementById('easyModal');
-const buttonClose = document.getElementsByClassName('modalClose')[0];
-
-buttonOpen.addEventListener('click', modalOpen);
-
-function modalOpen() {
-    modal.style.display = 'block';
-}
-
-buttonClose.addEventListener('click', modalClose);
-
-function modalClose() {
-    modal.style.display = 'none';
 }
