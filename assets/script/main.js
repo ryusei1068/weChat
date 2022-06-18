@@ -7,17 +7,17 @@ var ws;
 var username = "";
 
 function launchWebsocketClient() {
-    username = document.getElementById("name").value;
-    if (username.length <= 0) {
-        alert("please, username")
-        return
-    }
-
-    document.getElementById("name").value = "";
+    //    username = document.getElementById("name").value;
+    //    if (username.length <= 0) {
+    //        alert("please, username")
+    //        return
+    //    }
+    //
+    //    document.getElementById("name").value = "";
     connectToWebSocketServer(username);
 }
 
-function connectToWebSocketServer(username) {
+function connectToWebSocketServer() {
 
     if ("WebSocket" in window) {
         ws = new WebSocket(`ws://${document.location.host}/chat`)
@@ -26,33 +26,34 @@ function connectToWebSocketServer(username) {
             document.getElementById("connectionState").style.color = "green";
         };
 
-        ws.onmessage = function(evt) {
-            // logText("Message received from websocket : " + evt.data);
-            var jsondata = JSON.parse(evt.data);
-            if (jsondata.type === "newclient") {
-                appendNewUserIcon(jsondata.addr, "red", username);
-                startmove(jsondata.addr);
-            }
-            if (jsondata.type === "move") {
-                movedClient(jsondata.addr, jsondata.position.pagex, jsondata.position.pagey);
-            }
-            if (jsondata.type === "leaved") {
-                removeUserIcon(jsondata.addr)
-            }
+        ws.onmessage = function(event) {
+            var json = JSON.parse(event.data);
+            handlingJson(json);
         };
 
         ws.onclose = function(event) {
             document.getElementById("connectionState").innerHTML = "Disconnected";
             document.getElementById("connectionState").style.color = "red";
-            alert("Connection has been closed");
-            if (!event.wasClean) {
-                location.reload();
-            }
+            console.log(event.wasClean);
         };
 
     } else {
         alert("WebSocket is NOT supported by your Browser!");
     }
+}
+
+function handlingJson(json) {
+    if (json.type === "newclient") {
+        appendNewUserIcon(json.addr, "red");
+        startmove(json.addr);
+    }
+    if (json.type === "move") {
+        movedClient(json.addr, json.position.pagex, json.position.pagey);
+    }
+    if (json.type === "leaved") {
+        removeUserIcon(json.addr)
+    }
+
 }
 
 function removeUserIcon(id) {
@@ -73,7 +74,7 @@ function movedClient(id, pagex, pagey) {
     client.style.top = pagey + "px";
 }
 
-function appendNewUserIcon(id, iconColor, name) {
+function appendNewUserIcon(id, iconColor) {
     var userContainer = document.createElement('div');
     userContainer.classList.add("d-flex", "drag-and-drop");
     userContainer.setAttribute("id", id)
@@ -84,7 +85,7 @@ function appendNewUserIcon(id, iconColor, name) {
 
     var username = document.createElement('div');
     username.classList.add("user-name");
-    username.innerHTML = name;
+    username.innerHTML = "test"
     userIcon.append(username);
     userContainer.append(userIcon);
 
@@ -101,12 +102,11 @@ function appendNewUserIcon(id, iconColor, name) {
 
 function openModalWindow(event) {
     var chatWindow = document.getElementById("modal");
-    console.log(event.target.parentNode.id);
-    var container = document.createElement("div");
+    var address = event.target.parentNode.id;
     document.getElementById("users-space").style.display = "none";
 
     var inputtag = document.createElement("input");
-
+    inputtag.setAttribute("id", "privatemsg");
     var sendButton = document.createElement('button');
     sendButton.classList.add("btn", "btn-outline-primary");
     sendButton.innerHTML = "send";
@@ -118,13 +118,18 @@ function openModalWindow(event) {
     chatWindow.append(inputtag, sendButton, closebutton);
     closebutton.addEventListener('click', closeModalWindow);
     sendButton.addEventListener("click", function() {
-        var msg
+        var ms = document.getElementById("privatemsg").value;
+        var msg = {
+            type: "private",
+            addr: address,
+            msg: ms,
+        }
+        sendSocketServer(msg);
     })
 }
 
-function closeModalWindow(event) {
+function closeModalWindow() {
     document.getElementById("users-space").style.display = "block";
-
     document.getElementById('modal').innerHTML = '';
 }
 
@@ -155,22 +160,17 @@ function startmove(id) {
                     height: windowHeight,
                     width: windowWidth,
                 },
-
             };
-
-            if (typeof(ws) != undefined && socketOpen === ws.readyState) {
-                ws.send(JSON.stringify(moved));
-            }
+            sendSocketServer(moved);
         }
 
         function onMouseMove(event) {
             moveAt(event.pageX, event.pageY);
 
-            user.hidden = true;
-            let elemBelow = document.elementFromPoint(event.clientX, event.clientY);
-            user.hidden = false;
-
-            if (!elemBelow) return;
+            //            user.hidden = true;
+            //            let elemBelow = document.elementFromPoint(event.clientX, event.clientY);
+            //            user.hidden = false;
+            //            if (!elemBelow) return;
         }
         document.addEventListener('mousemove', onMouseMove);
 
@@ -185,6 +185,12 @@ function startmove(id) {
     };
 }
 
+
+function sendSocketServer(json) {
+    if (typeof(ws) != undefined && socketOpen === ws.readyState) {
+        ws.send(JSON.stringify(json));
+    }
+}
 
 function closeWebsocketClient() {
     document.getElementById("users-space").innerHTML = "";
