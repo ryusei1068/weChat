@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -27,7 +28,6 @@ type Client struct {
 	send     chan interface{}
 	name     string
 	Position Position
-	Friends  map[string]Friends
 }
 
 type Message struct {
@@ -37,14 +37,11 @@ type Message struct {
 	Position Position `json:"position,omitempty"`
 }
 
-type Friends struct {
-	id       string
-	Position Position
-}
-
 type Position struct {
-	PageX float64 `json:"pagex"`
-	PageY float64 `json:"pagey"`
+	PageX  float64 `json:"pagex"`
+	PageY  float64 `json:"pagey"`
+	Height float64 `json:"height"`
+	Width  float64 `json:"width"`
 }
 
 var (
@@ -67,9 +64,11 @@ func hub() {
 	for {
 		select {
 		case newcli := <-entering:
+			var newUserLocation Message = Message{Type: "move", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
 			for cli := range clients {
-				var pos Message = Message{Type: "move", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
-				cli.send <- pos
+				var userLocation Message = Message{Type: "move", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}}
+				cli.send <- newUserLocation
+				newcli.send <- userLocation
 			}
 
 			clients[newcli] = true
@@ -112,9 +111,9 @@ func (c *Client) readMessge() {
 		c.conn.Close()
 	}()
 
-	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	//	c.conn.SetReadLimit(maxMessageSize)
+	//	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	//	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
 	for {
 		var msg Message
@@ -131,9 +130,7 @@ func (c *Client) readMessge() {
 			log.Printf("parse error : %s", err)
 		}
 
-		if msg.Type == "broadcast" {
-			broadcast <- msg
-		} else if msg.Type == "private" {
+		if msg.Type == "private" {
 			private <- msg
 		} else if msg.Type == "move" {
 			c.updatePosition(msg.Position.PageX, msg.Position.PageY)
@@ -143,9 +140,9 @@ func (c *Client) readMessge() {
 }
 
 func (c *Client) writeMessge() {
-	ticker := time.NewTicker(pingPeriod)
+	//ticker := time.NewTicker(pingPeriod)
 	defer func() {
-		ticker.Stop()
+		//ticker.Stop()
 		c.conn.Close()
 	}()
 	for {
@@ -158,11 +155,11 @@ func (c *Client) writeMessge() {
 				return
 			}
 			c.conn.WriteJSON(message)
-		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
+			//	case <-ticker.C:
+			//			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			//		if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			//		return
+			//	}
 		}
 	}
 }
@@ -184,10 +181,6 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 	// connected new client
 	cli.conn.WriteJSON(Message{Type: "newclient", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
 
-	// if err := cli.conn.WriteMessage(websocket.TextMessage, []byte("your id is "+cli.id)); err != nil {
-	// 	log.Println(err)
-	// }
-
 	entering <- cli
 	go cli.writeMessge()
 	go cli.readMessge()
@@ -195,7 +188,9 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 
 func NewClient(conn *websocket.Conn) *Client {
 	uuid := uuid.NewString()
-	return &Client{id: uuid, conn: conn, send: make(chan interface{}, 5), Position: Position{PageX: 0, PageY: 0}}
+	pagex := rand.Float64() + 50
+	pagey := rand.Float64() + 50
+	return &Client{id: uuid, conn: conn, send: make(chan interface{}, 5), Position: Position{PageX: pagex, PageY: pagey}}
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +209,6 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 	// 	Value: uuid,
 	// }
 	// http.SetCookie(w, cookie)
-	//http.ServeFile(w, r, "index.html")
 }
 
 func getUserNameFromClient(w http.ResponseWriter, r *http.Request) {
