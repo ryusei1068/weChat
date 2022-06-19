@@ -1,5 +1,5 @@
 # demo
-![result](https://user-images.githubusercontent.com/61053124/173227311-d43b3c1b-c658-4fd4-9ba4-2ceb1cd2c93d.gif)
+![result](https://user-images.githubusercontent.com/61053124/174462928-d10301a4-b310-4b50-bc11-9b47fe379810.gif)
 
 ## stack  
 Go  
