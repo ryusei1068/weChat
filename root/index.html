@@ -3,47 +3,25 @@
 
 <head>
     <link rel="stylesheet" href="/assets/styles/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.3/font/bootstrap-icons.css">
+    <!-- CSS only -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
 </head>
 
 <body>
     <div id="main">
         <input type="text" value="" id="name" placeholder="your name" />
-        <input type="button" onClick="launchWebsocketClient();" value="Launch websocket client" />
-        <input type="button" onClick="closeWebsocketClient();" value="Close websocket client" />
-        <input type="button" onClick="clearLog();" value="Clear log" />
+        <button type="button" class="btn btn-outline-success" onClick="launchWebsocketClient();">Lauch websocket client</button>
+        <button type="button" class='btn btn-outline-danger' onClick="closeWebsocketClient();">Close websocket client</button>
         <p>
             <span id="connectionState" style='color:red'>Disconnected</span>
         </p>
-        <div>
-            <input type="text" value="" id="address" placeholder="address">
-            <input type="text" value="" id="message" placeholder="message" />
-            <input type="button" value="private message send" onClick="privateMessage()" />
-        </div>
-
-        <div>
-            <input type="text" value="" id="broadcast" placeholder="message" />
-            <input type="button" value="broadcast" onClick="broadcaset()" />
-        </div>
     </div>
 
     <div id="log">
-
     </div>
-    <div id="users-space">
-    </div>
-    <button id="modalOpen" class="button">Click Me</button>
-    <div id="easyModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h1>Great job 🎉</h1>
-                <span class="modalClose">×</span>
-            </div>
-            <div class="modal-body">
-                <p>You've just displayed this awesome Modal Window!</p>
-                <p>Let's enjoy learning JavaScript ☺️</p>
-            </div>
-        </div>
-    </div>
+    <div id="users-space" class="vh-100"></div>
+    <div id="modal"></div>
     <script src="/assets/script/main.js"></script>
 </body>
 

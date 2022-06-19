@@ -14,7 +14,7 @@ function launchWebsocketClient() {
     //    }
     //
     //    document.getElementById("name").value = "";
-    connectToWebSocketServer(username);
+    connectToWebSocketServer();
 }
 
 function connectToWebSocketServer() {
@@ -44,14 +44,17 @@ function connectToWebSocketServer() {
 
 function handlingJson(json) {
     if (json.type === "newclient") {
-        appendNewUserIcon(json.addr, "red");
+        appendNewUserIcon(json.addr, "red", json.position);
         startmove(json.addr);
     }
     if (json.type === "move") {
-        movedClient(json.addr, json.position.pagex, json.position.pagey);
+        movedClient(json.addr, json.position);
     }
     if (json.type === "leaved") {
         removeUserIcon(json.addr)
+    }
+    if (json.type === "private") {
+        console.log(json)
     }
 
 }
@@ -61,23 +64,25 @@ function removeUserIcon(id) {
     ele.remove();
 }
 
-function movedClient(id, pagex, pagey) {
+function movedClient(id, position) {
     var isExist = document.getElementById(id);
 
     if (isExist === null) {
-        appendNewUserIcon(id, "black");
+        appendNewUserIcon(id, "black", position);
     }
 
     var client = document.getElementById(id);
 
-    client.style.left = pagex + "px";
-    client.style.top = pagey + "px";
+    client.style.left = position.pagex + "px";
+    client.style.top = position.pagey + "px";
 }
 
-function appendNewUserIcon(id, iconColor) {
+function appendNewUserIcon(id, iconColor, position) {
     var userContainer = document.createElement('div');
     userContainer.classList.add("d-flex", "drag-and-drop");
     userContainer.setAttribute("id", id)
+    userContainer.style.left = position.pagex + "px";
+    userContainer.style.top = position.pagey + "px";
 
     var userIcon = document.createElement("div");
     userIcon.classList.add("user");
@@ -149,16 +154,12 @@ function startmove(id) {
         function moveAt(pageX, pageY) {
             var userid = user.id;
 
-            const windowWidth = document.documentElement.clientWidth;
-            const windowHeight = document.documentElement.clientHeight;
             const moved = {
                 type: "move",
                 addr: userid,
                 position: {
                     pagex: pageX - shiftX,
                     pagey: pageY - shiftY,
-                    height: windowHeight,
-                    width: windowWidth,
                 },
             };
             sendSocketServer(moved);

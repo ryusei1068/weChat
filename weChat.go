@@ -38,10 +38,8 @@ type Message struct {
 }
 
 type Position struct {
-	PageX  float64 `json:"pagex"`
-	PageY  float64 `json:"pagey"`
-	Height float64 `json:"height"`
-	Width  float64 `json:"width"`
+	PageX float64 `json:"pagex"`
+	PageY float64 `json:"pagey"`
 }
 
 var (
@@ -100,9 +98,9 @@ func hub() {
 	}
 }
 
-func (c *Client) updatePosition(pagex, pagey float64) {
-	c.Position.PageX = pagex
-	c.Position.PageY = pagey
+func (c *Client) updatePosition(position Position) {
+	c.Position.PageX = position.PageX
+	c.Position.PageY = position.PageY
 }
 
 func (c *Client) readMessge() {
@@ -133,7 +131,7 @@ func (c *Client) readMessge() {
 		if msg.Type == "private" {
 			private <- msg
 		} else if msg.Type == "move" {
-			c.updatePosition(msg.Position.PageX, msg.Position.PageY)
+			c.updatePosition(msg.Position)
 			position <- msg
 		}
 	}
@@ -188,8 +186,9 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 
 func NewClient(conn *websocket.Conn) *Client {
 	uuid := uuid.NewString()
-	pagex := rand.Float64() + 50
-	pagey := rand.Float64() + 50
+	rand.Seed(time.Now().UnixNano())
+	pagex := float64(rand.Intn(1000))
+	pagey := float64(rand.Intn(1000))
 	return &Client{id: uuid, conn: conn, send: make(chan interface{}, 5), Position: Position{PageX: pagex, PageY: pagey}}
 }
 
