@@ -4,16 +4,10 @@ const socketOpen = 1;
 const socketClosing = 2;
 const socketClosed = 3;
 var ws;
-var username = "";
 
 function launchWebsocketClient() {
-    //    username = document.getElementById("name").value;
-    //    if (username.length <= 0) {
-    //        alert("please, username")
-    //        return
-    //    }
-    //
-    //    document.getElementById("name").value = "";
+    document.getElementById("launch").style.display = "none";
+    document.getElementById("close").style.display = "block";
     connectToWebSocketServer();
 }
 
@@ -44,14 +38,15 @@ function connectToWebSocketServer() {
 
 function handlingJson(json) {
     if (json.type === "newclient") {
-        appendNewUserIcon(json.addr, "red", json.position);
-        startmove(json.addr);
+        document.getElementById("own").value = json.to;
+        appendNewUserIcon(json.to, "red", json.position);
+        startmove(json.to);
     }
     if (json.type === "move") {
-        movedClient(json.addr, json.position);
+        movedClient(json.to, json.position);
     }
     if (json.type === "leaved") {
-        removeUserIcon(json.addr)
+        removeUserIcon(json.to)
     }
     if (json.type === "private") {
         console.log(json)
@@ -64,99 +59,93 @@ function removeUserIcon(id) {
     ele.remove();
 }
 
+function positioning(ele, position) {
+    ele.style.left = position.pagex + "px";
+    ele.style.top = position.pagey + "px";
+}
+
 function movedClient(id, position) {
     var isExist = document.getElementById(id);
-
     if (isExist === null) {
         appendNewUserIcon(id, "black", position);
     }
 
     var client = document.getElementById(id);
+    positioning(client, position)
+}
 
-    client.style.left = position.pagex + "px";
-    client.style.top = position.pagey + "px";
+function createElement(tagName, classArr, id) {
+    var tag = document.createElement(tagName);
+    classArr.forEach(className => {
+        tag.classList.add(className);
+    });
+
+    if (id != undefined) {
+        tag.setAttribute("id", id);
+    }
+
+    return tag;
 }
 
 function appendNewUserIcon(id, iconColor, position) {
-    var userContainer = document.createElement('div');
-    userContainer.classList.add("d-flex", "drag-and-drop");
-    userContainer.setAttribute("id", id)
-    userContainer.style.left = position.pagex + "px";
-    userContainer.style.top = position.pagey + "px";
+    var userContainer = createElement('div', ["d-flex", "drag-and-drop"], id);
+    positioning(userContainer, position)
 
-    var userIcon = document.createElement("div");
-    userIcon.classList.add("user");
+    var userIcon = createElement("div", ["user"]);
     userIcon.style.backgroundColor = iconColor;
 
-    var username = document.createElement('div');
-    username.classList.add("user-name");
-    username.innerHTML = "test"
+    var username = createElement('div', ["user-name"]);
     userIcon.append(username);
     userContainer.append(userIcon);
 
     if ("black" === iconColor) {
-        mailIcon = document.createElement('i');
-        mailIcon.classList.add('bi', 'bi-envelope');
+        var mailIcon = createElement('i', ["bi", "bi-envelope"]);
         userContainer.append(mailIcon);
-        mailIcon.addEventListener("click", openModalWindow);
+        mailIcon.addEventListener("click", function(event) {
+            var ele = event.target.parentNode.closest(".drag-and-drop");
+            var address = ele.getAttribute("id");
+            const myModalEl = document.getElementById('chatModal')
+            const modal = new mdb.Modal(myModalEl)
+            modal.show()
+            setHeaderInfoAndClickAction(address);
+        });
     }
 
     document.getElementById("users-space").append(userContainer);
 }
 
+function setHeaderInfoAndClickAction(address) {
+    document.getElementsByClassName("modal-title")[0].innerHTML = address;
 
-function openModalWindow(event) {
-    var chatWindow = document.getElementById("modal");
-    var address = event.target.parentNode.id;
-    document.getElementById("users-space").style.display = "none";
-
-    var inputtag = document.createElement("input");
-    inputtag.setAttribute("id", "privatemsg");
-    var sendButton = document.createElement('button');
-    sendButton.classList.add("btn", "btn-outline-primary");
-    sendButton.innerHTML = "send";
-
-    var closebutton = document.createElement('button');
-    closebutton.classList.add("btn", 'btn-primary');
-    closebutton.innerHTML = "closeModal";
-
-    chatWindow.append(inputtag, sendButton, closebutton);
-    closebutton.addEventListener('click', closeModalWindow);
-    sendButton.addEventListener("click", function() {
+    document.getElementById("send").addEventListener("click", function() {
         var ms = document.getElementById("privatemsg").value;
+        document.getElementById("privatemsg").value = "";
+        var ownId = document.getElementById("own").value;
         var msg = {
             type: "private",
-            addr: address,
+            to: address,
+            from: ownId,
             msg: ms,
         }
         sendSocketServer(msg);
     })
 }
 
-function closeModalWindow() {
-    document.getElementById("users-space").style.display = "block";
-    document.getElementById('modal').innerHTML = '';
-}
-
-
 function startmove(id) {
     var user = document.getElementById(id);
 
     user.onmousedown = function(event) {
-
-        let shiftX = event.clientX - user.getBoundingClientRect().left;
-        let shiftY = event.clientY - user.getBoundingClientRect().top;
+        var shiftX = event.clientX - user.getBoundingClientRect().left;
+        var shiftY = event.clientY - user.getBoundingClientRect().top;
 
         document.getElementById("users-space").append(user);
-
         moveAt(event.pageX, event.pageY);
 
         function moveAt(pageX, pageY) {
             var userid = user.id;
-
             const moved = {
                 type: "move",
-                addr: userid,
+                to: userid,
                 position: {
                     pagex: pageX - shiftX,
                     pagey: pageY - shiftY,
@@ -167,11 +156,6 @@ function startmove(id) {
 
         function onMouseMove(event) {
             moveAt(event.pageX, event.pageY);
-
-            //            user.hidden = true;
-            //            let elemBelow = document.elementFromPoint(event.clientX, event.clientY);
-            //            user.hidden = false;
-            //            if (!elemBelow) return;
         }
         document.addEventListener('mousemove', onMouseMove);
 
@@ -195,5 +179,7 @@ function sendSocketServer(json) {
 
 function closeWebsocketClient() {
     document.getElementById("users-space").innerHTML = "";
+    document.getElementById("close").style.display = "none";
+    document.getElementById("launch").style.display = "block";
     if (typeof(ws) != "undefined") ws.close(1000, "Work complete");;
 }
