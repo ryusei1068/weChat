@@ -7,10 +7,13 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
 var upgrader = websocket.Upgrader{
@@ -32,7 +35,8 @@ type Client struct {
 
 type Message struct {
 	Type     string   `json:"type"`
-	Addr     string   `json:"addr,omitempty"`
+	To       string   `json:"to,omitempty"`
+	From     string   `json:"from,omitempty"`
 	Msg      string   `json:"msg,omitempty"`
 	Position Position `json:"position,omitempty"`
 }
@@ -62,9 +66,9 @@ func hub() {
 	for {
 		select {
 		case newcli := <-entering:
-			var newUserLocation Message = Message{Type: "move", Addr: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
+			var newUserLocation Message = Message{Type: "move", To: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
 			for cli := range clients {
-				var userLocation Message = Message{Type: "move", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}}
+				var userLocation Message = Message{Type: "move", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}}
 				cli.send <- newUserLocation
 				newcli.send <- userLocation
 			}
@@ -75,7 +79,7 @@ func hub() {
 			if _, ok := clients[cli]; ok {
 				delete(clients, cli)
 				close(cli.send)
-				var msg Message = Message{Type: "leaved", Addr: cli.id}
+				var msg Message = Message{Type: "leaved", To: cli.id}
 				for cli := range clients {
 					cli.send <- msg
 				}
@@ -86,7 +90,7 @@ func hub() {
 			}
 		case msg := <-private:
 			for cli := range clients {
-				if cli.id == msg.Addr {
+				if cli.id == msg.To {
 					cli.send <- msg
 				}
 			}
@@ -177,7 +181,7 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 	// userid := cookie.Value
 	cli := NewClient(conn)
 	// connected new client
-	cli.conn.WriteJSON(Message{Type: "newclient", Addr: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
+	cli.conn.WriteJSON(Message{Type: "newclient", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
 
 	entering <- cli
 	go cli.writeMessge()
@@ -189,7 +193,7 @@ func NewClient(conn *websocket.Conn) *Client {
 	rand.Seed(time.Now().UnixNano())
 	pagex := float64(rand.Intn(1000))
 	pagey := float64(rand.Intn(1000))
-	return &Client{id: uuid, conn: conn, send: make(chan interface{}, 5), Position: Position{PageX: pagex, PageY: pagey}}
+	return &Client{id: uuid, conn: conn, send: make(chan interface{}), Position: Position{PageX: pagex, PageY: pagey}}
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
@@ -221,8 +225,16 @@ func getUserNameFromClient(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(string(body))
 }
 
-func main() {
+func getEnvVariable(key string) string {
+	return os.Getenv(key)
+}
 
+func main() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	fmt.Println(getEnvVariable("DBPW"))
 	//	http.HandleFunc("/", serveHome)
 	http.Handle("/", http.FileServer(http.Dir("root/")))
 
@@ -232,7 +244,7 @@ func main() {
 
 	go hub()
 
-	err := http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

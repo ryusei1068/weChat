@@ -37,19 +37,22 @@ function connectToWebSocketServer() {
 }
 
 function handlingJson(json) {
-    if (json.type === "newclient") {
-        document.getElementById("own").value = json.to;
-        appendNewUserIcon(json.to, "red", json.position);
-        startmove(json.to);
-    }
-    if (json.type === "move") {
-        movedClient(json.to, json.position);
-    }
-    if (json.type === "leaved") {
-        removeUserIcon(json.to)
-    }
-    if (json.type === "private") {
-        console.log(json)
+    switch (json.type) {
+        case "newclient":
+            document.getElementById("own").value = json.to;
+            appendNewUserIcon(json.to, "red", json.position);
+            startmove(json.to);
+            break;
+        case "move":
+            movedClient(json.to, json.position);
+            break;
+        case "leaved":
+            removeUserIcon(json.to);
+            break;
+        case "private":
+            console.log(json)
+        document.getElementsByClassName("modal-body")[0].innerHTML += json.msg
+            break;
     }
 
 }
@@ -169,7 +172,6 @@ function startmove(id) {
         return false;
     };
 }
-
 
 function sendSocketServer(json) {
     if (typeof(ws) != undefined && socketOpen === ws.readyState) {
