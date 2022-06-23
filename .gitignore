@@ -1,3 +1,4 @@
 load.yml
 weChat
-.env
+.env 
+db/

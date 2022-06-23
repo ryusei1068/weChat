@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"reflect"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -173,12 +175,6 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// cookie, err := r.Cookie("id")
-
-	// if err != nil {
-	// 	log.Fatal("Cookie: ", err)
-	// }
-	// userid := cookie.Value
 	cli := NewClient(conn)
 	// connected new client
 	cli.conn.WriteJSON(Message{Type: "newclient", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
@@ -229,12 +225,24 @@ func getEnvVariable(key string) string {
 	return os.Getenv(key)
 }
 
-func main() {
+func loadEnvFile() {
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	fmt.Println(getEnvVariable("DBPW"))
+}
+
+func ConnectDB() {
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", getEnvVariable("DBUSER"), getEnvVariable("DBPW"), getEnvVariable("DBNAME")))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(reflect.TypeOf(db))
+}
+
+func main() {
+	loadEnvFile()
+	ConnectDB()
 	//	http.HandleFunc("/", serveHome)
 	http.Handle("/", http.FileServer(http.Dir("root/")))
 
@@ -244,7 +252,7 @@ func main() {
 
 	go hub()
 
-	err = http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
