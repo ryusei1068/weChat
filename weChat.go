@@ -4,12 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -109,7 +107,7 @@ func (c *Client) updatePosition(position Position) {
 	c.Position.PageY = position.PageY
 }
 
-func (c *Client) readMessge() {
+func (c *Client) readMessge(db *sql.DB) {
 	defer func() {
 		leaving <- c
 		c.conn.Close()
@@ -135,12 +133,26 @@ func (c *Client) readMessge() {
 		}
 
 		if msg.Type == "private" {
+			insert(db, msg)
 			private <- msg
 		} else if msg.Type == "move" {
 			c.updatePosition(msg.Position)
 			position <- msg
 		}
 	}
+}
+
+func insert(db *sql.DB, msg Message) {
+	res, err := db.Exec(
+		"INSERT INTO messages (address, sender, text) VALUES (?, ?, ?)",
+		msg.To,
+		msg.From,
+		msg.Msg,
+	)
+	if err != nil {
+		log.Printf("insert db.Exec error err:%v", err)
+	}
+	fmt.Println(res)
 }
 
 func (c *Client) writeMessge() {
@@ -168,20 +180,21 @@ func (c *Client) writeMessge() {
 	}
 }
 
-func wshandler(w http.ResponseWriter, r *http.Request) {
+func (s *Service) wshandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Upgrade failed %s ", err)
 		return
 	}
 
+	db := s.db
 	cli := NewClient(conn)
 	// connected new client
 	cli.conn.WriteJSON(Message{Type: "newclient", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
 
 	entering <- cli
 	go cli.writeMessge()
-	go cli.readMessge()
+	go cli.readMessge(db)
 }
 
 func NewClient(conn *websocket.Conn) *Client {
@@ -190,35 +203,6 @@ func NewClient(conn *websocket.Conn) *Client {
 	pagex := float64(rand.Intn(1000))
 	pagey := float64(rand.Intn(1000))
 	return &Client{id: uuid, conn: conn, send: make(chan interface{}), Position: Position{PageX: pagex, PageY: pagey}}
-}
-
-func serveHome(w http.ResponseWriter, r *http.Request) {
-	log.Println(r.URL)
-	if r.URL.Path != "/" {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	// uuid := uuid.NewString()
-	// cookie := &http.Cookie{
-	// 	Name:  "id",
-	// 	Value: uuid,
-	// }
-	// http.SetCookie(w, cookie)
-}
-
-func getUserNameFromClient(w http.ResponseWriter, r *http.Request) {
-	log.Println(r.URL)
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	body, _ := io.ReadAll(r.Body)
-	fmt.Println(string(body))
 }
 
 func getEnvVariable(key string) string {
@@ -232,27 +216,32 @@ func loadEnvFile() {
 	}
 }
 
-func ConnectDB() {
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", getEnvVariable("DBUSER"), getEnvVariable("DBPW"), getEnvVariable("DBNAME")))
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(reflect.TypeOf(db))
+type Service struct {
+	db *sql.DB
 }
 
 func main() {
 	loadEnvFile()
-	ConnectDB()
-	//	http.HandleFunc("/", serveHome)
-	http.Handle("/", http.FileServer(http.Dir("root/")))
 
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", getEnvVariable("DBUSER"), getEnvVariable("DBPW"), getEnvVariable("DBNAME")))
+	if err != nil {
+		panic(err)
+	}
+
+	// See "Important settings" section.
+	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+
+	s := &Service{db: db}
+
+	http.Handle("/", http.FileServer(http.Dir("root/")))
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
-	http.HandleFunc("/chat", wshandler)
-	// http.HandleFunc("/username", getUserNameFromClient)
+	http.HandleFunc("/chat", s.wshandler)
 
 	go hub()
 
-	err := http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

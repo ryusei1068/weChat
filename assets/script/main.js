@@ -51,7 +51,7 @@ function handlingJson(json) {
             break;
         case "private":
             console.log(json)
-        document.getElementsByClassName("modal-body")[0].innerHTML += json.msg
+            document.getElementsByClassName("modal-body")[0].innerHTML += json.msg
             break;
     }
 

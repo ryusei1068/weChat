@@ -1,4 +1,4 @@
 load.yml
 weChat
-.env 
-db/
+.env
+*_test.go
