@@ -50,11 +50,15 @@ function handlingJson(json) {
             removeUserIcon(json.to);
             break;
         case "private":
-            console.log(json)
-            document.getElementsByClassName("modal-body")[0].innerHTML += json.msg
+            giveNotice(json)
             break;
     }
 
+}
+
+function giveNotice(json) {
+    var ele = document.getElementsByClassName("modal-body")[0]
+    ele.innerHTML += json.msg
 }
 
 function removeUserIcon(id) {
@@ -107,14 +111,45 @@ function appendNewUserIcon(id, iconColor, position) {
         mailIcon.addEventListener("click", function(event) {
             var ele = event.target.parentNode.closest(".drag-and-drop");
             var address = ele.getAttribute("id");
+
+            var ownId = document.getElementById("own").value;
+            var body = {
+                type: "msgHistory",
+                to: ownId,
+                from: address,
+            };
+
+            var client = new HttpClient("POST", body, "messages")
+            client.httpRequest().then(res => console.log(res))
+            setHeaderInfoAndClickAction(address);
+
             const myModalEl = document.getElementById('chatModal')
             const modal = new mdb.Modal(myModalEl)
             modal.show()
-            setHeaderInfoAndClickAction(address);
         });
     }
 
     document.getElementById("users-space").append(userContainer);
+}
+
+class HttpClient {
+    baseUri = "http://localhost:8080/"
+    constructor(method, body, endpoint) {
+        this.method = method;
+        this.body = body
+        this.endpoint = endpoint
+    }
+
+    httpRequest() {
+        const header = new Headers();
+        header.append("Content-Type", "application/json")
+        const request = new Request(this.baseUri + this.endpoint, {
+            method: this.method,
+            headers: header,
+            body: JSON.stringify(this.body),
+        });
+        return fetch(request)
+    }
 }
 
 function setHeaderInfoAndClickAction(address) {

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -128,7 +129,7 @@ func (c *Client) readMessge(db *sql.DB) {
 			break
 		}
 
-		if err = json.Unmarshal([]byte(string(message)), &msg); err != nil {
+		if err = json.Unmarshal(message, &msg); err != nil {
 			log.Printf("parse error : %s", err)
 		}
 
@@ -220,6 +221,25 @@ type Service struct {
 	db *sql.DB
 }
 
+func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
+	var msgHistory Message
+	body, err := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		log.Printf("read body error : %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if err = json.Unmarshal(body, &msgHistory); err != nil {
+		log.Printf("parse error : %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	fmt.Println("Struct is:", msgHistory)
+	w.WriteHeader(200)
+}
+
 func main() {
 	loadEnvFile()
 
@@ -238,7 +258,7 @@ func main() {
 	http.Handle("/", http.FileServer(http.Dir("root/")))
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	http.HandleFunc("/chat", s.wshandler)
-
+	http.HandleFunc("/messages", s.selectQuery)
 	go hub()
 
 	err = http.ListenAndServe(":8080", nil)
