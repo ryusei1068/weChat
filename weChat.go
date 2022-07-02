@@ -134,8 +134,11 @@ func (c *Client) readMessge(db *sql.DB) {
 		}
 
 		if msg.Type == "private" {
-			insert(db, msg)
-			private <- msg
+			if err = insert(db, &msg); err != nil {
+				c.conn.WriteJSON(msg)
+			} else {
+				private <- msg
+			}
 		} else if msg.Type == "move" {
 			c.updatePosition(msg.Position)
 			position <- msg
@@ -143,17 +146,22 @@ func (c *Client) readMessge(db *sql.DB) {
 	}
 }
 
-func insert(db *sql.DB, msg Message) {
-	res, err := db.Exec(
-		"INSERT INTO messages (address, sender, text) VALUES (?, ?, ?)",
+func insert(db *sql.DB, msg *Message) error {
+	utc := time.Now().UTC()
+
+	_, err := db.Exec(
+		"INSERT INTO messages (address, sender, text, dt) VALUES (?, ?, ?, ?)",
 		msg.To,
 		msg.From,
 		msg.Msg,
+		utc,
 	)
 	if err != nil {
 		log.Printf("insert db.Exec error err:%v", err)
+		msg.Msg = "failed to send your message"
 	}
-	fmt.Println(res)
+
+	return err
 }
 
 func (c *Client) writeMessge() {
@@ -236,7 +244,6 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	fmt.Println("Struct is:", msgHistory)
 	w.WriteHeader(200)
 }
 
