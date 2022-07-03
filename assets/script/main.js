@@ -50,7 +50,10 @@ function handlingJson(json) {
             removeUserIcon(json.to);
             break;
         case "private":
-            giveNotice(json)
+            giveNotice(json);
+            break;
+        case "Error":
+            alert(json.msg);
             break;
     }
 

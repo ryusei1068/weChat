@@ -158,6 +158,7 @@ func insert(db *sql.DB, msg *Message) error {
 	)
 	if err != nil {
 		log.Printf("insert db.Exec error err:%v", err)
+		msg.Type = "Error"
 		msg.Msg = "failed to send your message"
 	}
 
@@ -233,6 +234,7 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 	var msgHistory Message
 	body, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
+
 	if err != nil {
 		log.Printf("read body error : %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -244,6 +246,15 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	db := s.db
+	rows, e := db.Query("select text from messages where (address=? and sender=?) or (address=? and sender=?) order by dt", msgHistory.To, msgHistory.From, msgHistory.From, msgHistory.To)
+	if e != nil {
+		log.Printf("failed query :%s", e)
+	}
+	defer rows.Close()
+	fmt.Println(rows)
+	//select text from messages where (address = 'foo' and sender = 'alice') or (address = 'alice' and sender = 'foo') order by dt;
+
 	w.WriteHeader(200)
 }
 
