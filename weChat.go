@@ -246,14 +246,27 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	db := s.db
-	rows, e := db.Query("select text from messages where (address=? and sender=?) or (address=? and sender=?) order by dt", msgHistory.To, msgHistory.From, msgHistory.From, msgHistory.To)
-	if e != nil {
-		log.Printf("failed query :%s", e)
+
+	rows, err := s.db.Query("select text, sender from messages where (address=? and sender=?) or (address=? and sender=?) order by dt", msgHistory.To, msgHistory.From, msgHistory.From, msgHistory.To)
+	if err != nil {
+		log.Printf("failed query :%s", err)
 	}
 	defer rows.Close()
-	fmt.Println(rows)
-	//select text from messages where (address = 'foo' and sender = 'alice') or (address = 'alice' and sender = 'foo') order by dt;
+
+	for rows.Next() {
+		var (
+			text   string
+			sender string
+		)
+
+		if err := rows.Scan(&text, &sender); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("text %s sender %s \n", text, sender)
+	}
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
 
 	w.WriteHeader(200)
 }
