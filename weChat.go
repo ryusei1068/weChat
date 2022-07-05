@@ -27,6 +27,7 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
+	hub      *Hub
 	id       string
 	conn     *websocket.Conn
 	send     chan interface{}
@@ -47,14 +48,13 @@ type Position struct {
 	PageY float64 `json:"pagey"`
 }
 
-var (
-	entering  = make(chan *Client)
-	leaving   = make(chan *Client)
-	clients   = make(map[*Client]bool)
-	broadcast = make(chan Message)
-	private   = make(chan Message)
-	position  = make(chan Message)
-)
+type Hub struct {
+	entering chan *Client
+	leaving  chan *Client
+	clients  map[*Client]bool
+	private  chan Message
+	position chan Message
+}
 
 const (
 	writeWait      = 10 * time.Second
@@ -63,40 +63,45 @@ const (
 	maxMessageSize = 512
 )
 
-func hub() {
+func newHub() *Hub {
+	return &Hub{
+		entering: make(chan *Client),
+		leaving:  make(chan *Client),
+		clients:  make(map[*Client]bool),
+		private:  make(chan Message),
+		position: make(chan Message),
+	}
+}
+
+func (h *Hub) run() {
 	for {
 		select {
-		case newcli := <-entering:
+		case newcli := <-h.entering:
 			var newUserLocation Message = Message{Type: "move", To: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
-			for cli := range clients {
+			for cli := range h.clients {
 				var userLocation Message = Message{Type: "move", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}}
 				cli.send <- newUserLocation
 				newcli.send <- userLocation
 			}
+			h.clients[newcli] = true
 
-			clients[newcli] = true
-
-		case cli := <-leaving:
-			if _, ok := clients[cli]; ok {
-				delete(clients, cli)
+		case cli := <-h.leaving:
+			if _, ok := h.clients[cli]; ok {
+				delete(h.clients, cli)
 				close(cli.send)
 				var msg Message = Message{Type: "leaved", To: cli.id}
-				for cli := range clients {
+				for cli := range h.clients {
 					cli.send <- msg
 				}
 			}
-		case msg := <-broadcast:
-			for cli := range clients {
-				cli.send <- msg
-			}
-		case msg := <-private:
-			for cli := range clients {
+		case msg := <-h.private:
+			for cli := range h.clients {
 				if cli.id == msg.To {
 					cli.send <- msg
 				}
 			}
-		case msg := <-position:
-			for cli := range clients {
+		case msg := <-h.position:
+			for cli := range h.clients {
 				cli.send <- msg
 			}
 		}
@@ -110,7 +115,7 @@ func (c *Client) updatePosition(position Position) {
 
 func (c *Client) readMessge(db *sql.DB) {
 	defer func() {
-		leaving <- c
+		c.hub.leaving <- c
 		c.conn.Close()
 	}()
 
@@ -137,11 +142,11 @@ func (c *Client) readMessge(db *sql.DB) {
 			if err = insert(db, &msg); err != nil {
 				c.conn.WriteJSON(msg)
 			} else {
-				private <- msg
+				c.hub.private <- msg
 			}
 		} else if msg.Type == "move" {
 			c.updatePosition(msg.Position)
-			position <- msg
+			c.hub.position <- msg
 		}
 	}
 }
@@ -190,7 +195,7 @@ func (c *Client) writeMessge() {
 	}
 }
 
-func (s *Service) wshandler(w http.ResponseWriter, r *http.Request) {
+func (s *Service) wshandler(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Upgrade failed %s ", err)
@@ -198,21 +203,21 @@ func (s *Service) wshandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db := s.db
-	cli := NewClient(conn)
+	cli := NewClient(conn, hub)
 	// connected new client
 	cli.conn.WriteJSON(Message{Type: "newclient", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
 
-	entering <- cli
+	cli.hub.entering <- cli
 	go cli.writeMessge()
 	go cli.readMessge(db)
 }
 
-func NewClient(conn *websocket.Conn) *Client {
+func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 	uuid := uuid.NewString()
 	rand.Seed(time.Now().UnixNano())
 	pagex := float64(rand.Intn(1000))
 	pagey := float64(rand.Intn(1000))
-	return &Client{id: uuid, conn: conn, send: make(chan interface{}), Position: Position{PageX: pagex, PageY: pagey}}
+	return &Client{hub: hub, id: uuid, conn: conn, send: make(chan interface{}), Position: Position{PageX: pagex, PageY: pagey}}
 }
 
 func getEnvVariable(key string) string {
@@ -285,12 +290,15 @@ func main() {
 	db.SetMaxIdleConns(10)
 
 	s := &Service{db: db}
+	hub := newHub()
+	go hub.run()
 
 	http.Handle("/", http.FileServer(http.Dir("root/")))
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
-	http.HandleFunc("/chat", s.wshandler)
+	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
+		s.wshandler(hub, w, r)
+	})
 	http.HandleFunc("/messages", s.selectQuery)
-	go hub()
 
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
