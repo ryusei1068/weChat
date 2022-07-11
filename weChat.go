@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -24,6 +25,10 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+type Service struct {
+	db *sql.DB
 }
 
 type Client struct {
@@ -119,10 +124,6 @@ func (c *Client) readMessge(db *sql.DB) {
 		c.conn.Close()
 	}()
 
-	//	c.conn.SetReadLimit(maxMessageSize)
-	//	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	//	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-
 	for {
 		var msg Message
 		_, message, err := c.conn.ReadMessage()
@@ -171,11 +172,8 @@ func insert(db *sql.DB, msg *Message) error {
 }
 
 func (c *Client) writeMessge() {
-	//ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		//ticker.Stop()
-		c.conn.Close()
-	}()
+	defer c.conn.Close()
+
 	for {
 		select {
 		case message, ok := <-c.send:
@@ -186,11 +184,6 @@ func (c *Client) writeMessge() {
 				return
 			}
 			c.conn.WriteJSON(message)
-			//	case <-ticker.C:
-			//			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			//		if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-			//		return
-			//	}
 		}
 	}
 }
@@ -219,7 +212,7 @@ func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 	return &Client{hub: hub, id: uuid, conn: conn, send: make(chan interface{}), Position: Position{PageX: pagex, PageY: pagey}}
 }
 
-func getEnvVariable(key string) string {
+func getEnv(key string) string {
 	return os.Getenv(key)
 }
 
@@ -228,10 +221,6 @@ func loadEnvFile() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-}
-
-type Service struct {
-	db *sql.DB
 }
 
 func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
@@ -284,18 +273,34 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
-func main() {
-	loadEnvFile()
-
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", getEnvVariable("DBUSER"), getEnvVariable("DBPW"), getEnvVariable("DBNAME")))
-	if err != nil {
-		panic(err)
+func connectDB() *sql.DB {
+	cfg := mysql.Config{
+		User:   getEnv("DBUSER"),
+		Passwd: getEnv("DBPW"),
+		DBName: getEnv("DBNAME"),
 	}
 
-	// See "Important settings" section.
+	db, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if pingErr := db.Ping(); pingErr != nil {
+		log.Fatal(pingErr)
+	}
+
 	db.SetConnMaxLifetime(time.Minute * 3)
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(10)
+
+	fmt.Println("Connected!")
+	return db
+}
+
+func main() {
+	loadEnvFile()
+
+	db := connectDB()
 
 	s := &Service{db: db}
 	hub := newHub()
@@ -307,9 +312,5 @@ func main() {
 		s.wshandler(hub, w, r)
 	})
 	http.HandleFunc("/messages", s.selectQuery)
-
-	err = http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
-	}
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
