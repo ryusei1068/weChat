@@ -204,7 +204,6 @@ func (s *Service) wshandler(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	db := s.db
 	cli := NewClient(conn, hub)
-	// connected new client
 	cli.conn.WriteJSON(Message{Type: "newclient", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
 
 	cli.hub.entering <- cli
@@ -255,9 +254,12 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query("select text, sender from messages where (address=? and sender=?) or (address=? and sender=?) order by dt", msgHistory.To, msgHistory.From, msgHistory.From, msgHistory.To)
 	if err != nil {
 		log.Printf("failed query :%s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	defer rows.Close()
 
+	messages := make([]Message, 0)
 	for rows.Next() {
 		var (
 			text   string
@@ -265,13 +267,19 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 		)
 
 		if err := rows.Scan(&text, &sender); err != nil {
-			log.Fatal(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Println(err)
+			return
 		}
-		log.Printf("text %s sender %s \n", text, sender)
+		messages = append(messages, Message{From: sender, Msg: text})
 	}
 	if err := rows.Err(); err != nil {
-		log.Fatal(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
+
+	fmt.Println(messages)
 
 	w.WriteHeader(200)
 }

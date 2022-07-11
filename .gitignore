@@ -2,3 +2,4 @@ load.yml
 weChat
 .env
 *_test.go
+/client
