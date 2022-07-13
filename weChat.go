@@ -83,13 +83,24 @@ func (h *Hub) sendToOneUser(msg Message) {
 	}
 }
 
+func (c *Client) createMSG(msgType string) Message {
+	return Message{
+		Type: msgType,
+		To:   c.id,
+		Position: Position{
+			PageX: c.Position.PageX,
+			PageY: c.Position.PageY,
+		},
+	}
+}
+
 func (h *Hub) run() {
 	for {
 		select {
 		case newcli := <-h.entering:
-			var newUserLocation Message = Message{Type: "move", To: newcli.id, Position: Position{PageX: newcli.Position.PageX, PageY: newcli.Position.PageY}}
+			var newUserLocation Message = newcli.createMSG("move")
 			for cli := range h.clients {
-				var userLocation Message = Message{Type: "move", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}}
+				var userLocation Message = cli.createMSG("move")
 				cli.send <- newUserLocation
 				newcli.send <- userLocation
 			}
@@ -99,7 +110,7 @@ func (h *Hub) run() {
 			if _, ok := h.clients[cli]; ok {
 				delete(h.clients, cli)
 				close(cli.send)
-				var msg Message = Message{Type: "leaved", To: cli.id}
+				msg := cli.createMSG("leaved")
 				h.sendToAllUsers(msg)
 			}
 		case msg := <-h.private:
@@ -137,7 +148,7 @@ func (c *Client) readMessge(db *sql.DB) {
 		}
 
 		if msg.Type == "private" {
-			if err = insert(db, &msg); err != nil {
+			if err = storeTheMessage(db, &msg); err != nil {
 				c.conn.WriteJSON(msg)
 			} else {
 				c.hub.private <- msg
@@ -149,7 +160,7 @@ func (c *Client) readMessge(db *sql.DB) {
 	}
 }
 
-func insert(db *sql.DB, msg *Message) error {
+func storeTheMessage(db *sql.DB, msg *Message) error {
 	utc := time.Now().UTC()
 
 	_, err := db.Exec(
@@ -194,7 +205,8 @@ func (s *Service) wshandler(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	db := s.db
 	cli := NewClient(conn, hub)
-	cli.conn.WriteJSON(Message{Type: "newclient", To: cli.id, Position: Position{PageX: cli.Position.PageX, PageY: cli.Position.PageY}})
+	msg := cli.createMSG("newclient")
+	cli.conn.WriteJSON(msg)
 
 	cli.hub.entering <- cli
 	go cli.writeMessge()
@@ -204,9 +216,20 @@ func (s *Service) wshandler(hub *Hub, w http.ResponseWriter, r *http.Request) {
 func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 	uuid := uuid.NewString()
 	rand.Seed(time.Now().UnixNano())
+
 	pagex := float64(rand.Intn(1000))
 	pagey := float64(rand.Intn(1000))
-	return &Client{hub: hub, id: uuid, conn: conn, send: make(chan interface{}), Position: Position{PageX: pagex, PageY: pagey}}
+
+	return &Client{
+		hub:  hub,
+		id:   uuid,
+		conn: conn,
+		send: make(chan interface{}),
+		Position: Position{
+			PageX: pagex,
+			pageY: pagey,
+		},
+	}
 }
 
 func getEnv(key string) string {
@@ -220,7 +243,7 @@ func loadEnvFile() {
 	}
 }
 
-func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
+func (s *Service) getMessageHistory(w http.ResponseWriter, r *http.Request) {
 	var msgHistory Message
 	body, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
@@ -237,7 +260,12 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query("select text, sender from messages where (address=? and sender=?) or (address=? and sender=?) order by dt", msgHistory.To, msgHistory.From, msgHistory.From, msgHistory.To)
+	rows, err := s.db.Query("select text, sender from messages where (address=? and sender=?) or (address=? and sender=?) order by dt",
+		msgHistory.To,
+		msgHistory.From,
+		msgHistory.From,
+		msgHistory.To)
+
 	if err != nil {
 		log.Printf("failed query :%s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -270,10 +298,16 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func connectDB() *sql.DB {
+	dbname := getEnv("DBNAME")
+
+	if getEnv("MODE") == "test" {
+		dbname = getEnv("DBNAME_TEST")
+	}
+
 	cfg := mysql.Config{
 		User:   getEnv("DBUSER"),
 		Passwd: getEnv("DBPW"),
-		DBName: getEnv("DBNAME"),
+		DBName: dbname,
 	}
 
 	db, err := sql.Open("mysql", cfg.FormatDSN())
@@ -304,9 +338,11 @@ func main() {
 
 	http.Handle("/", http.FileServer(http.Dir("root/")))
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
+
 	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
 		s.wshandler(hub, w, r)
 	})
-	http.HandleFunc("/messages", s.selectQuery)
+
+	http.HandleFunc("/messages", s.getMessageHistory)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
