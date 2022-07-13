@@ -227,7 +227,7 @@ func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 		send: make(chan interface{}),
 		Position: Position{
 			PageX: pagex,
-			pageY: pagey,
+			PageY: pagey,
 		},
 	}
 }
@@ -236,15 +236,54 @@ func getEnv(key string) string {
 	return os.Getenv(key)
 }
 
-func loadEnvFile() {
+func loadEnv() {
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 }
 
+func (s *Service) messageHistoryByUser(msg Message) ([]Message, error) {
+	rows, err := s.db.Query("select text, sender from messages where address in (?, ?) and sender in (?, ?) order by dt",
+		msg.To,
+		msg.From,
+		msg.From,
+		msg.To,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("messageHistoryByUser %q, %q: %v",
+			msg.To,
+			msg.From,
+			err,
+		)
+	}
+	defer rows.Close()
+
+	messages := make([]Message, 0)
+	for rows.Next() {
+		var msg Message
+		if err := rows.Scan(&msg.Msg, &msg.From); err != nil {
+			return nil, fmt.Errorf("messageHistoryByUser %q, %q: %v",
+				msg.To,
+				msg.From,
+				err,
+			)
+		}
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("messageHistoryByUser %q, %q: %v",
+			msg.To,
+			msg.From,
+			err,
+		)
+	}
+	return messages, nil
+}
+
 func (s *Service) getMessageHistory(w http.ResponseWriter, r *http.Request) {
-	var msgHistory Message
 	body, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 
@@ -254,46 +293,27 @@ func (s *Service) getMessageHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = json.Unmarshal(body, &msgHistory); err != nil {
+	var msg Message
+	if err = json.Unmarshal(body, &msg); err != nil {
 		log.Printf("parse error : %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	rows, err := s.db.Query("select text, sender from messages where (address=? and sender=?) or (address=? and sender=?) order by dt",
-		msgHistory.To,
-		msgHistory.From,
-		msgHistory.From,
-		msgHistory.To)
-
+	messages, err := s.messageHistoryByUser(msg)
 	if err != nil {
-		log.Printf("failed query :%s", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	messages := make([]Message, 0)
-	for rows.Next() {
-		var (
-			text   string
-			sender string
-		)
-
-		if err := rows.Scan(&text, &sender); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Println(err)
-			return
-		}
-		messages = append(messages, Message{From: sender, Msg: text})
-	}
-	if err := rows.Err(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
 		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Println(messages)
+	json, err := json.MarshalIndent(messages, "", "  ")
+	if err != nil {
+		log.Printf("JSON marshaling failed: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	fmt.Printf("%s\n", json)
 	w.WriteHeader(200)
 }
 
@@ -328,7 +348,7 @@ func connectDB() *sql.DB {
 }
 
 func main() {
-	loadEnvFile()
+	loadEnv()
 
 	db := connectDB()
 
