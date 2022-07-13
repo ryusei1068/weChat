@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
@@ -21,7 +20,6 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// Resolve cross-domain problems
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
@@ -61,13 +59,6 @@ type Hub struct {
 	position chan Message
 }
 
-const (
-	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
-	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 512
-)
-
 func newHub() *Hub {
 	return &Hub{
 		entering: make(chan *Client),
@@ -75,6 +66,20 @@ func newHub() *Hub {
 		clients:  make(map[*Client]bool),
 		private:  make(chan Message),
 		position: make(chan Message),
+	}
+}
+
+func (h *Hub) sendToAllUsers(msg Message) {
+	for client := range h.clients {
+		client.send <- msg
+	}
+}
+
+func (h *Hub) sendToOneUser(msg Message) {
+	for client := range h.clients {
+		if client.id == msg.To {
+			client.send <- msg
+		}
 	}
 }
 
@@ -95,20 +100,12 @@ func (h *Hub) run() {
 				delete(h.clients, cli)
 				close(cli.send)
 				var msg Message = Message{Type: "leaved", To: cli.id}
-				for cli := range h.clients {
-					cli.send <- msg
-				}
+				h.sendToAllUsers(msg)
 			}
 		case msg := <-h.private:
-			for cli := range h.clients {
-				if cli.id == msg.To {
-					cli.send <- msg
-				}
-			}
+			h.sendToOneUser(msg)
 		case msg := <-h.position:
-			for cli := range h.clients {
-				cli.send <- msg
-			}
+			h.sendToAllUsers(msg)
 		}
 	}
 }
@@ -269,7 +266,6 @@ func (s *Service) selectQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Println(messages)
-
 	w.WriteHeader(200)
 }
 
